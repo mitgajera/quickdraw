@@ -24,6 +24,9 @@ export const PRICE_SCALE = 100_000_000;
 export const TAP_LOCK_SECS = 1;
 export const MAX_AHEAD_SECS = 120;
 export const VOL_WINDOW_SECS = 30;
+/** Scales on the candle volatility estimate: drift before a column opens, wander inside it (lib.rs). */
+export const DRIFT_VOL_SCALE = 2.5;
+export const WINDOW_VOL_SCALE = 1.0;
 export const MIN_VOL_SAMPLES = 5;
 export const CANDLE_SLOTS = 256;
 export const MAX_TAPS = 12;

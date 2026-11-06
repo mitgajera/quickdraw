@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { Keypair } from "@solana/web3.js";
 import type { Book, Candles, Market } from "./accounts";
 import { CANDLE_SLOTS } from "./constants";
-import { boxAt, judge, multiplierBps, normCdf, quoteBox, sigmaFromCandles, touchProbability } from "./odds";
+import { boxAt, judge, multiplierBps, normCdf, quoteBox, sigmaFromCandles, touchProbability, windowTouchProbability } from "./odds";
 
 const close = (a: number, b: number, tol: number) => assert.ok(Math.abs(a - b) < tol, `${a} vs ${b}`);
 
@@ -37,13 +37,27 @@ test("normal cdf and touch probability match the program", () => {
   assert.equal(multiplierBps(0, 700), null);
 });
 
+test("window touch probability matches dense integration (same refs as odds.rs)", () => {
+  const cases: [bigint, bigint, bigint, number, number, number, number][] = [
+    [0n, 200n, 300n, 4, 4, 100, 0.40116226], [0n, 0n, 100n, 4, 4, 100, 0.61907413],
+    [-30n, 0n, 100n, 1, 4, 100, 0.77586811], [0n, 1000n, 1100n, 8, 4, 100, 0.00382799],
+    [0n, -300n, -200n, 2, 4, 100, 0.39214575],
+  ];
+  for (const [price, lo, hi, lead, w, sigma, want] of cases) {
+    const got = windowTouchProbability(price, lo, hi, lead, w, sigma, sigma);
+    assert.ok(Math.abs(got - want) / want < 0.005, `${lo}..${hi} lead ${lead}: ${got} vs ${want}`);
+  }
+});
+
 test("quotes boxes like tap.rs", () => {
   const price = 8_998_000_000n, now = 1_000_001;
   const near = quoteBox(book, boxAt(market, 2251n, 250_002), price, now, 1_800_000);
   const far = quoteBox(book, boxAt(market, 2252n, 250_002), price, now, 1_800_000);
-  assert.ok(near.ok && near.multBps >= 25_000 && near.multBps < 35_000);
-  assert.ok(far.ok && far.multBps >= 90_000 && far.multBps < 110_000);
-  assert.deepEqual(quoteBox(book, boxAt(market, 2249n, 250_002), price, now, 1_800_000), { ok: false, reason: "range" });
+  assert.ok(near.ok && near.multBps >= 34_500 && near.multBps < 38_500, JSON.stringify(near));
+  assert.ok(far.ok && far.multBps >= 45_000 && far.multBps < 50_000, JSON.stringify(far));
+  const inside = quoteBox(book, boxAt(market, 2249n, 250_001), price, now, 1_800_000);
+  assert.ok(inside.ok && inside.multBps >= 19_500 && inside.multBps < 21_500, JSON.stringify(inside));
+  assert.ok(Math.abs(windowTouchProbability(0n, 200n, 300n, 4, 4, 250, 100) - 0.28198) < 0.0015);
   assert.deepEqual(quoteBox(book, boxAt(market, 2251n, 250_000), price, now, 1_800_000), { ok: false, reason: "locked" });
   assert.deepEqual(quoteBox(book, boxAt(market, 2251n, 250_040), price, now, 1_800_000), { ok: false, reason: "too-far" });
 });
