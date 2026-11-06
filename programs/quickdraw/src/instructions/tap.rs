@@ -6,7 +6,7 @@ use crate::odds::{multiplier_bps, window_touch_probability, ONE_X_BPS};
 use crate::oracle::read_oracle_price;
 use crate::state::{Book, Candles, Market, Player, TapSlot};
 use crate::{
-    BOOK_SEED, DRIFT_VOL_SCALE, MARKET_SEED, MAX_AHEAD_SECS, PLAYER_SEED, TAP_LOCK_SECS,
+    BOOK_SEED, DRIFT_VOL_SCALE, MARKET_SEED, MAX_AHEAD_SECS, MAX_ZOOM, PLAYER_SEED, TAP_LOCK_SECS,
     TAP_ORACLE_MAX_AGE, VOL_WINDOW_SECS, WINDOW_VOL_SCALE,
 };
 
@@ -23,8 +23,10 @@ pub struct Quote {
 }
 
 /// Prices the box at `band_index` x `column` from the oracle price at `now` (its publish time).
-/// Rows are `[i * band, (i + 1) * band)` in price units; columns are `[k * col, (k + 1) * col)`
-/// in unix seconds. Volatility comes from the recorded candles, floored by the market.
+/// Rows are `[i * h, (i + 1) * h)` in price units with `h = market.band << zoom`, so the app can
+/// zoom the grid out when the market is busy and keep a real gradient of odds; columns are
+/// `[k * col, (k + 1) * col)` in unix seconds. Volatility comes from the recorded candles,
+/// floored by the market.
 #[allow(clippy::too_many_arguments)]
 pub fn quote(
     market: &Market,
@@ -34,9 +36,14 @@ pub fn quote(
     now: i64,
     band_index: i64,
     column: i64,
+    zoom: u8,
     stake: u64,
 ) -> Result<Quote> {
-    let band = i64::try_from(market.band).map_err(|_| QuickdrawError::Overflow)?;
+    require!(zoom <= MAX_ZOOM, QuickdrawError::InvalidParams);
+    let band = i64::try_from(market.band)
+        .ok()
+        .and_then(|b| b.checked_mul(1 << zoom))
+        .ok_or(QuickdrawError::Overflow)?;
     let lo = band_index
         .checked_mul(band)
         .ok_or(QuickdrawError::Overflow)?;
@@ -95,6 +102,7 @@ pub fn place_tap_handler(
     mut ctx: Context<PlaceTap>,
     band_index: i64,
     column: i64,
+    zoom: u8,
     stake: u64,
     min_mult_bps: u32,
 ) -> Result<()> {
@@ -120,6 +128,7 @@ pub fn place_tap_handler(
             reading.publish_time,
             band_index,
             column,
+            zoom,
             stake,
         )?
     };
@@ -256,6 +265,7 @@ pub(crate) mod tests {
             NOW,
             2251,
             250_001,
+            0,
             5_000_000,
         )
         .unwrap();
@@ -272,8 +282,30 @@ pub(crate) mod tests {
     #[test]
     fn far_boxes_pay_more_and_the_current_band_pays_least() {
         // one and two bands above, window opening in 7s: ~3.7x and ~4.7x (dense-integration refs)
-        let near = quote(&market(), &book(), &candles(), PRICE, NOW, 2251, 250_002, 1).unwrap();
-        let far = quote(&market(), &book(), &candles(), PRICE, NOW, 2252, 250_002, 1).unwrap();
+        let near = quote(
+            &market(),
+            &book(),
+            &candles(),
+            PRICE,
+            NOW,
+            2251,
+            250_002,
+            0,
+            1,
+        )
+        .unwrap();
+        let far = quote(
+            &market(),
+            &book(),
+            &candles(),
+            PRICE,
+            NOW,
+            2252,
+            250_002,
+            0,
+            1,
+        )
+        .unwrap();
         assert!(far.mult_bps > near.mult_bps);
         assert!(
             (34_500..38_500).contains(&near.mult_bps),
@@ -282,9 +314,31 @@ pub(crate) mod tests {
         );
         assert!((45_000..50_000).contains(&far.mult_bps), "{}", far.mult_bps);
         // seven bands above in the next column is beyond the 25x cap: not offered
-        assert!(quote(&market(), &book(), &candles(), PRICE, NOW, 2256, 250_001, 1).is_err());
+        assert!(quote(
+            &market(),
+            &book(),
+            &candles(),
+            PRICE,
+            NOW,
+            2256,
+            250_001,
+            0,
+            1
+        )
+        .is_err());
         // the band holding today's price is far from certain three seconds out: ~2.1x
-        let inside = quote(&market(), &book(), &candles(), PRICE, NOW, 2249, 250_001, 1).unwrap();
+        let inside = quote(
+            &market(),
+            &book(),
+            &candles(),
+            PRICE,
+            NOW,
+            2249,
+            250_001,
+            0,
+            1,
+        )
+        .unwrap();
         assert!(
             (19_500..21_500).contains(&inside.mult_bps),
             "{}",
@@ -293,10 +347,88 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn zoom_scales_the_rows() {
+        // zoom 1: rows are $0.08 tall, so index 1125 covers $90.00..$90.08
+        let q = quote(
+            &market(),
+            &book(),
+            &candles(),
+            PRICE,
+            NOW,
+            1125,
+            250_002,
+            1,
+            1,
+        )
+        .unwrap();
+        assert_eq!((q.lo, q.hi), (9_000_000_000, 9_007_999_999));
+        // a taller row two bands up is more likely to be touched than the same row at zoom 0
+        let wide = quote(
+            &market(),
+            &book(),
+            &candles(),
+            PRICE,
+            NOW,
+            1125,
+            250_002,
+            1,
+            1,
+        )
+        .unwrap();
+        let thin = quote(
+            &market(),
+            &book(),
+            &candles(),
+            PRICE,
+            NOW,
+            2251,
+            250_002,
+            0,
+            1,
+        )
+        .unwrap();
+        assert!(wide.mult_bps < thin.mult_bps);
+        assert!(quote(
+            &market(),
+            &book(),
+            &candles(),
+            PRICE,
+            NOW,
+            1125,
+            250_002,
+            MAX_ZOOM + 1,
+            1
+        )
+        .is_err());
+    }
+
+    #[test]
     fn locked_and_distant_columns_are_rejected() {
         // the column already running, and one more than two minutes ahead
-        assert!(quote(&market(), &book(), &candles(), PRICE, NOW, 2251, 250_000, 1).is_err());
-        assert!(quote(&market(), &book(), &candles(), PRICE, NOW, 2251, 250_040, 1).is_err());
+        assert!(quote(
+            &market(),
+            &book(),
+            &candles(),
+            PRICE,
+            NOW,
+            2251,
+            250_000,
+            0,
+            1
+        )
+        .is_err());
+        assert!(quote(
+            &market(),
+            &book(),
+            &candles(),
+            PRICE,
+            NOW,
+            2251,
+            250_040,
+            0,
+            1
+        )
+        .is_err());
     }
 
     #[test]
@@ -311,6 +443,7 @@ pub(crate) mod tests {
             NOW,
             2251,
             250_001,
+            0,
             1_000_000,
         );
         assert_eq!(capped.unwrap_err(), QuickdrawError::ProfitTooLarge.into());

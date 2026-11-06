@@ -28,6 +28,8 @@ pub const MAX_ORACLE_AGE_SECONDS: i64 = 30;
 pub const TAP_ORACLE_MAX_AGE: i64 = 10;
 /// A column stops taking taps this many seconds before it opens.
 pub const TAP_LOCK_SECS: i64 = 1;
+/// Largest grid zoom: rows up to `band << MAX_ZOOM` (16x the market's base row).
+pub const MAX_ZOOM: u8 = 4;
 /// Furthest ahead a column can be tapped.
 pub const MAX_AHEAD_SECS: i64 = 120;
 /// Seconds of candles used for the volatility estimate behind the odds.
@@ -130,10 +132,11 @@ pub mod quickdraw {
         ctx: Context<PlaceTap>,
         band_index: i64,
         column: i64,
+        zoom: u8,
         stake: u64,
         min_mult_bps: u32,
     ) -> Result<()> {
-        instructions::place_tap_handler(ctx, band_index, column, stake, min_mult_bps)
+        instructions::place_tap_handler(ctx, band_index, column, zoom, stake, min_mult_bps)
     }
 
     pub fn settle(ctx: Context<Settle>) -> Result<()> {
