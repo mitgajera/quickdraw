@@ -1,6 +1,8 @@
 import { PublicKey } from "@solana/web3.js";
 
-export const PROGRAM_ID = new PublicKey("ALSvgxDgSnXBdHYVgZtBW69CBusRn6s5Q17Wzn36aT8D");
+export const PROGRAM_ID = new PublicKey("7TBHSjenh1DFt7C8vnNVfXDLbZ3cCgEeAa4XcTUvF6Au");
+/** Circle's devnet USDC: the only token the house takes (faucet.circle.com, Solana Devnet). */
+export const USDC_MINT = new PublicKey("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
 export const DELEGATION_PROGRAM_ID = new PublicKey("DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh");
 export const ORACLE_PROGRAM_ID = new PublicKey("PriCems5tHihc6UDXDjzjeawomAwBduWMGAi8ZUjppd");
 export const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
@@ -13,7 +15,7 @@ export const ER_RPC = "https://devnet-as.magicblock.app";
 /** Validator identity of the Asia ER, passed when delegating accounts. */
 export const ER_VALIDATOR = new PublicKey("MAS1Dt9qreoRMQ14YQuhg8UTZMMzDdKhmkZMECCzk57");
 
-/** Test USD, like USDC: 6 decimals. */
+/** USDC has 6 decimals. */
 export const USD_DECIMALS = 6;
 export const USD = 1_000_000n;
 /** Oracle prices carry 8 decimals. */

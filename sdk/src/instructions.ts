@@ -3,8 +3,8 @@
 import { Buffer } from "buffer";
 import { PublicKey, TransactionInstruction } from "@solana/web3.js";
 import idlJson from "./idl.json";
-import { ER_VALIDATOR, PROGRAM_ID } from "./constants";
-import { ataOf, bookPda, mintPda, playerPda, type MarketKeys } from "./pdas";
+import { ER_VALIDATOR, PROGRAM_ID, USDC_MINT } from "./constants";
+import { ataOf, bookPda, playerPda, type MarketKeys } from "./pdas";
 
 type IdlType = string | { array: [IdlType, number] } | { defined: { name: string } | string };
 interface IdlSeed { kind: "const" | "account" | "arg"; value?: number[]; path?: string }
@@ -123,7 +123,7 @@ const marketAccounts = (m: MarketKeys) => ({
 
 const playerAccounts = (owner: PublicKey) => ({
   owner, payer: owner, user: owner, player: playerPda(owner), "player.owner": owner,
-  book: bookPda(), mint: mintPda(), user_tokens: ataOf(owner),
+  book: bookPda(), mint: USDC_MINT, user_tokens: ataOf(owner),
 });
 
 /** Typed builders for every instruction the app and keeper send. */
@@ -141,7 +141,6 @@ export const ix = {
       band_index: a.bandIndex, column: a.column, zoom: a.zoom, stake: a.stake, min_mult_bps: a.minMultBps,
     }),
 
-  faucet: (owner: PublicKey) => buildIx("faucet", playerAccounts(owner)),
   initPlayer: (owner: PublicKey) => buildIx("init_player", playerAccounts(owner)),
   deposit: (owner: PublicKey, amount: bigint) => buildIx("deposit", playerAccounts(owner), { amount }),
   withdraw: (owner: PublicKey, amount: bigint) => buildIx("withdraw", playerAccounts(owner), { amount }),
