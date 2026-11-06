@@ -62,4 +62,34 @@ pub mod quickdraw {
         instructions::undelegate_candles_handler(ctx)
     }
 
+    // --- the house ---
+
+    pub fn init_book(ctx: Context<InitBook>, params: BookParams) -> Result<()> {
+        instructions::init_book_handler(ctx, params)
+    }
+
+    pub fn update_book(ctx: Context<UpdateBook>, params: BookParams) -> Result<()> {
+        instructions::update_book_handler(ctx, params)
+    }
+
+    pub fn faucet(ctx: Context<Faucet>) -> Result<()> {
+        instructions::faucet_handler(ctx)
+    }
+
+    pub fn delegate_book(ctx: Context<DelegateBook>) -> Result<()> {
+        instructions::delegate_book_handler(ctx)
+    }
+
+    pub fn undelegate_book(ctx: Context<UndelegateBook>) -> Result<()> {
+        instructions::undelegate_book_handler(ctx)
+    }
+
+    pub fn lp_add(ctx: Context<Liquidity>, amount: u64) -> Result<()> {
+        instructions::lp_add_handler(ctx, amount)
+    }
+
+    pub fn lp_remove(ctx: Context<Liquidity>, shares: u64) -> Result<()> {
+        instructions::lp_remove_handler(ctx, shares)
+    }
+
 }
