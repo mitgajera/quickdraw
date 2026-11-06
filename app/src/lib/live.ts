@@ -41,7 +41,7 @@ export class LiveModel {
 
   private owner: PublicKey | null = null;
   private timers: ReturnType<typeof setInterval>[] = [];
-  private seenOthers = new Map<string, Set<number>>();
+  private seenOthers = new Map<string, Map<number, TapSlot>>();
   private offsets: number[] = [];
   private listeners = new Set<() => void>();
   private stopped = false;
@@ -185,15 +185,21 @@ export class LiveModel {
       for (const o of this.others) {
         const k = o.owner.toBase58();
         const seen = this.seenOthers.get(k);
-        const ids = new Set(o.taps.map((t) => t.id));
         if (seen) {
           for (const t of o.taps) {
             if (!seen.has(t.id)) {
               this.pushFeed({ id: `${k}-${t.id}`, who: short(o.owner), me: false, tone: "", text: `${usd(t.stake)} · ${mult(t.multBps)}` });
             }
           }
+          // their taps that closed since last scan: same rule the keeper settled them by
+          for (const [id, t] of seen) {
+            if (o.taps.some((x) => x.id === id) || !this.candles) continue;
+            const outcome = judge(this.candles, t.lo, t.hi, t.start, t.end, Math.max(this.publishTime, t.end));
+            if (outcome === "win") this.pushFeed({ id: `${k}-${id}-w`, who: short(o.owner), me: false, tone: "win", text: `won ${usd(payoutOf(t))}` });
+            else if (outcome === "lose") this.pushFeed({ id: `${k}-${id}-l`, who: short(o.owner), me: false, tone: "loss", text: `lost ${usd(t.stake)}` });
+          }
         }
-        this.seenOthers.set(k, ids);
+        this.seenOthers.set(k, new Map(o.taps.map((t) => [t.id, t])));
       }
     } catch { /* next round */ }
   }
