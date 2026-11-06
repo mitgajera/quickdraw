@@ -1,0 +1,71 @@
+// One-time, idempotent devnet setup: house book, markets, delegation to the ER, seed liquidity.
+// Run with the book authority's keypair: `pnpm --filter @quickdraw/keeper bootstrap`.
+import { Buffer } from "node:buffer";
+import { Connection, type PublicKey } from "@solana/web3.js";
+import {
+  DELEGATION_PROGRAM_ID, ER_VALIDATOR, USD, bookPda, buildIx, decodeBook, ix, marketKeys, playerPda,
+  sendWithKeypairs, type Symbol,
+} from "@quickdraw/sdk";
+import { config, loadKeypair } from "./config";
+
+const me = loadKeypair();
+const base = new Connection(config.baseRpc, "confirmed");
+const er = new Connection(config.erRpc, "confirmed");
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Grid per market: row height and volatility floor in 1e-8 USD, 4-second columns. */
+const GRIDS: Record<Symbol, { band: bigint; sigmaFloor: bigint }> = {
+  SOL: { band: 4_000_000n, sigmaFloor: 1_800_000n },        // $0.04 rows, $0.018/sqrt(s)
+  BTC: { band: 500_000_000n, sigmaFloor: 200_000_000n },    // $5 rows, $2/sqrt(s)
+  ETH: { band: 20_000_000n, sigmaFloor: 8_000_000n },       // $0.20 rows, $0.08/sqrt(s)
+};
+const SEED_LIQUIDITY = 500n * USD;
+
+const owner = async (c: Connection, k: PublicKey) => (await c.getAccountInfo(k))?.owner;
+async function run(label: string, c: Connection, ixs: Parameters<typeof sendWithKeypairs>[1]) {
+  const r = await sendWithKeypairs(c, ixs, [me], { pollMs: c === base ? 400 : 20 });
+  console.log(`${label.padEnd(24)} ${r.ms.toFixed(0).padStart(5)}ms ${r.signature}`);
+}
+const known = { authority: me.publicKey, payer: me.publicKey };
+
+console.log(`authority ${me.publicKey.toBase58()}`);
+
+const book = bookPda();
+if (!(await owner(base, book))) {
+  await run("init_book", base, [buildIx("init_book", known, {
+    params: { edge_bps: 700, min_mult_bps: 11_000, max_mult_bps: 250_000, max_exposure_bps: 5_000, max_profit: 500n * USD },
+  })]);
+}
+
+for (const symbol of config.markets) {
+  const m = marketKeys(symbol);
+  const grid = GRIDS[symbol];
+  if (!(await owner(base, m.market))) {
+    await run(`init_market ${symbol}`, base, [buildIx("init_market", { ...known, oracle: m.oracle }, {
+      params: { symbol: [...Buffer.from(symbol.padEnd(8, "\0"))], band: grid.band, col_secs: 4, sigma_floor: grid.sigmaFloor },
+    })]);
+  }
+  if (!(await owner(base, m.candles))?.equals(DELEGATION_PROGRAM_ID)) {
+    await run(`delegate candles ${symbol}`, base, [buildIx("delegate_candles", { ...known, market: m.market, "market.oracle": m.oracle }, {}, [ER_VALIDATOR])]);
+  }
+}
+
+if (!(await owner(base, book))?.equals(DELEGATION_PROGRAM_ID)) {
+  await run("delegate book", base, [buildIx("delegate_book", known, {}, [ER_VALIDATOR])]);
+}
+
+// seed the house through the authority's own player account
+const player = playerPda(me.publicKey);
+for (let i = 0; i < 30 && !(await er.getAccountInfo(book)); i++) await sleep(1000);
+const b = decodeBook((await er.getAccountInfo(book))!.data);
+if (b.totalShares === 0n) {
+  if (!(await owner(base, player))) {
+    await run("faucet + player + deposit", base, [ix.faucet(me.publicKey), ix.initPlayer(me.publicKey), ix.deposit(me.publicKey, SEED_LIQUIDITY)]);
+  }
+  if (!(await owner(base, player))?.equals(DELEGATION_PROGRAM_ID)) await run("delegate player", base, [ix.delegatePlayer(me.publicKey)]);
+  for (let i = 0; i < 30 && !(await er.getAccountInfo(player)); i++) await sleep(1000);
+  await run("lp_add", er, [ix.lpAdd(me.publicKey, SEED_LIQUIDITY)]);
+}
+
+const after = decodeBook((await er.getAccountInfo(book))!.data);
+console.log(`book liquidity $${Number(after.liquidity) / 1e6} exposure $${Number(after.exposure) / 1e6} taps ${after.taps}`);

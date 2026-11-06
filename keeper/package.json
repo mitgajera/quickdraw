@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "tsx src/index.ts",
+    "bootstrap": "tsx src/setup.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
