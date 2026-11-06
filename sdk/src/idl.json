@@ -1,0 +1,2692 @@
+{
+  "address": "ALSvgxDgSnXBdHYVgZtBW69CBusRn6s5Q17Wzn36aT8D",
+  "metadata": {
+    "name": "quickdraw",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Tap trading on Solana: tap the box the price will hit."
+  },
+  "instructions": [
+    {
+      "name": "delegate_book",
+      "discriminator": [
+        175,
+        120,
+        231,
+        223,
+        36,
+        212,
+        159,
+        143
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "buffer_book",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  102,
+                  102,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "book"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                138,
+                180,
+                136,
+                46,
+                93,
+                246,
+                2,
+                95,
+                15,
+                165,
+                13,
+                18,
+                219,
+                66,
+                76,
+                35,
+                80,
+                167,
+                62,
+                139,
+                70,
+                161,
+                66,
+                94,
+                77,
+                35,
+                158,
+                40,
+                184,
+                193,
+                3,
+                194
+              ]
+            }
+          }
+        },
+        {
+          "name": "delegation_record_book",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "book"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "delegation_program"
+            }
+          }
+        },
+        {
+          "name": "delegation_metadata_book",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110,
+                  45,
+                  109,
+                  101,
+                  116,
+                  97,
+                  100,
+                  97,
+                  116,
+                  97
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "book"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "delegation_program"
+            }
+          }
+        },
+        {
+          "name": "book",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  111,
+                  107
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "owner_program",
+          "address": "ALSvgxDgSnXBdHYVgZtBW69CBusRn6s5Q17Wzn36aT8D"
+        },
+        {
+          "name": "delegation_program",
+          "address": "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "delegate_candles",
+      "discriminator": [
+        98,
+        219,
+        23,
+        219,
+        113,
+        40,
+        187,
+        72
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "market",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  107,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market.oracle",
+                "account": "Market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "buffer_candles",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  102,
+                  102,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "candles"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                138,
+                180,
+                136,
+                46,
+                93,
+                246,
+                2,
+                95,
+                15,
+                165,
+                13,
+                18,
+                219,
+                66,
+                76,
+                35,
+                80,
+                167,
+                62,
+                139,
+                70,
+                161,
+                66,
+                94,
+                77,
+                35,
+                158,
+                40,
+                184,
+                193,
+                3,
+                194
+              ]
+            }
+          }
+        },
+        {
+          "name": "delegation_record_candles",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "candles"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "delegation_program"
+            }
+          }
+        },
+        {
+          "name": "delegation_metadata_candles",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110,
+                  45,
+                  109,
+                  101,
+                  116,
+                  97,
+                  100,
+                  97,
+                  116,
+                  97
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "candles"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "delegation_program"
+            }
+          }
+        },
+        {
+          "name": "candles",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  110,
+                  100,
+                  108,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "owner_program",
+          "address": "ALSvgxDgSnXBdHYVgZtBW69CBusRn6s5Q17Wzn36aT8D"
+        },
+        {
+          "name": "delegation_program",
+          "address": "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "delegate_player",
+      "discriminator": [
+        235,
+        159,
+        245,
+        102,
+        161,
+        199,
+        254,
+        89
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "docs": [
+            "The player's owner; the PDA seeds tie the account to this signer."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "buffer_player",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  102,
+                  102,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "player"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                138,
+                180,
+                136,
+                46,
+                93,
+                246,
+                2,
+                95,
+                15,
+                165,
+                13,
+                18,
+                219,
+                66,
+                76,
+                35,
+                80,
+                167,
+                62,
+                139,
+                70,
+                161,
+                66,
+                94,
+                77,
+                35,
+                158,
+                40,
+                184,
+                193,
+                3,
+                194
+              ]
+            }
+          }
+        },
+        {
+          "name": "delegation_record_player",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "player"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "delegation_program"
+            }
+          }
+        },
+        {
+          "name": "delegation_metadata_player",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110,
+                  45,
+                  109,
+                  101,
+                  116,
+                  97,
+                  100,
+                  97,
+                  116,
+                  97
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "player"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "delegation_program"
+            }
+          }
+        },
+        {
+          "name": "player",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "payer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "owner_program",
+          "address": "ALSvgxDgSnXBdHYVgZtBW69CBusRn6s5Q17Wzn36aT8D"
+        },
+        {
+          "name": "delegation_program",
+          "address": "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "deposit",
+      "discriminator": [
+        242,
+        35,
+        198,
+        137,
+        82,
+        225,
+        242,
+        182
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true
+        },
+        {
+          "name": "player",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_tokens",
+          "writable": true
+        },
+        {
+          "name": "vault_tokens",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  45,
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  115
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "faucet",
+      "discriminator": [
+        0,
+        98,
+        59,
+        30,
+        144,
+        142,
+        113,
+        12
+      ],
+      "accounts": [
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "vault",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_tokens",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "account",
+                "path": "user"
+              },
+              {
+                "kind": "const",
+                "value": [
+                  6,
+                  221,
+                  246,
+                  225,
+                  215,
+                  101,
+                  161,
+                  147,
+                  217,
+                  203,
+                  225,
+                  70,
+                  206,
+                  235,
+                  121,
+                  172,
+                  28,
+                  180,
+                  133,
+                  237,
+                  95,
+                  91,
+                  55,
+                  145,
+                  58,
+                  140,
+                  245,
+                  133,
+                  126,
+                  255,
+                  0,
+                  169
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                140,
+                151,
+                37,
+                143,
+                78,
+                36,
+                137,
+                241,
+                187,
+                61,
+                16,
+                41,
+                20,
+                142,
+                13,
+                131,
+                11,
+                90,
+                19,
+                153,
+                218,
+                255,
+                16,
+                132,
+                4,
+                142,
+                123,
+                216,
+                219,
+                233,
+                248,
+                89
+              ]
+            }
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "associated_token_program",
+          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "init_book",
+      "discriminator": [
+        96,
+        122,
+        49,
+        43,
+        63,
+        61,
+        118,
+        152
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "book",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  111,
+                  107
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_tokens",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  45,
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  115
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "BookParams"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "init_market",
+      "discriminator": [
+        33,
+        253,
+        15,
+        116,
+        89,
+        25,
+        127,
+        236
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "oracle",
+          "docs": [
+            "is owned by the delegation program here; `record_tick` verifies owner and data on the ER."
+          ]
+        },
+        {
+          "name": "market",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  107,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "oracle"
+              }
+            ]
+          }
+        },
+        {
+          "name": "candles",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  110,
+                  100,
+                  108,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "MarketParams"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "init_player",
+      "discriminator": [
+        114,
+        27,
+        219,
+        144,
+        50,
+        15,
+        228,
+        66
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "player",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "lp_add",
+      "discriminator": [
+        54,
+        184,
+        58,
+        132,
+        63,
+        139,
+        251,
+        164
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true
+        },
+        {
+          "name": "player",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "book",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  111,
+                  107
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "lp_remove",
+      "discriminator": [
+        233,
+        58,
+        222,
+        32,
+        162,
+        75,
+        125,
+        119
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true
+        },
+        {
+          "name": "player",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "book",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  111,
+                  107
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "shares",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "place_tap",
+      "discriminator": [
+        90,
+        138,
+        102,
+        7,
+        182,
+        8,
+        6,
+        185
+      ],
+      "accounts": [
+        {
+          "name": "signer",
+          "docs": [
+            "The player's owner or their active session key."
+          ],
+          "signer": true
+        },
+        {
+          "name": "player",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "player.owner",
+                "account": "Player"
+              }
+            ]
+          }
+        },
+        {
+          "name": "book",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  111,
+                  107
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "market",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  107,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market.oracle",
+                "account": "Market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "candles"
+        },
+        {
+          "name": "oracle"
+        }
+      ],
+      "args": [
+        {
+          "name": "band_index",
+          "type": "i64"
+        },
+        {
+          "name": "column",
+          "type": "i64"
+        },
+        {
+          "name": "stake",
+          "type": "u64"
+        },
+        {
+          "name": "min_mult_bps",
+          "type": "u32"
+        }
+      ]
+    },
+    {
+      "name": "process_undelegation",
+      "discriminator": [
+        196,
+        28,
+        41,
+        206,
+        48,
+        37,
+        51,
+        167
+      ],
+      "accounts": [
+        {
+          "name": "base_account",
+          "writable": true
+        },
+        {
+          "name": "buffer",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  117,
+                  110,
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  101,
+                  45,
+                  98,
+                  117,
+                  102,
+                  102,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "base_account"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                181,
+                183,
+                0,
+                225,
+                242,
+                87,
+                58,
+                192,
+                204,
+                6,
+                34,
+                1,
+                52,
+                74,
+                207,
+                151,
+                184,
+                53,
+                6,
+                235,
+                140,
+                229,
+                25,
+                152,
+                204,
+                98,
+                126,
+                24,
+                147,
+                128,
+                167,
+                62
+              ]
+            }
+          }
+        },
+        {
+          "name": "payer",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "account_seeds",
+          "type": {
+            "vec": "bytes"
+          }
+        }
+      ]
+    },
+    {
+      "name": "record_tick",
+      "discriminator": [
+        4,
+        173,
+        33,
+        13,
+        140,
+        104,
+        251,
+        143
+      ],
+      "accounts": [
+        {
+          "name": "market",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  107,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market.oracle",
+                "account": "Market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "candles",
+          "writable": true
+        },
+        {
+          "name": "oracle"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "set_session",
+      "discriminator": [
+        156,
+        135,
+        126,
+        111,
+        184,
+        206,
+        194,
+        141
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true
+        },
+        {
+          "name": "player",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "session",
+          "type": "pubkey"
+        },
+        {
+          "name": "expires_at",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "settle",
+      "discriminator": [
+        175,
+        42,
+        185,
+        87,
+        144,
+        131,
+        102,
+        212
+      ],
+      "accounts": [
+        {
+          "name": "player",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "player.owner",
+                "account": "Player"
+              }
+            ]
+          }
+        },
+        {
+          "name": "book",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  111,
+                  107
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "market",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  107,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market.oracle",
+                "account": "Market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "candles"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "undelegate_book",
+      "discriminator": [
+        122,
+        145,
+        114,
+        28,
+        40,
+        87,
+        180,
+        254
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "book",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  111,
+                  107
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "magic_program",
+          "address": "Magic11111111111111111111111111111111111111"
+        },
+        {
+          "name": "magic_context",
+          "writable": true,
+          "address": "MagicContext1111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "undelegate_candles",
+      "discriminator": [
+        166,
+        20,
+        11,
+        35,
+        142,
+        95,
+        19,
+        144
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "market",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  107,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market.oracle",
+                "account": "Market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "candles",
+          "writable": true
+        },
+        {
+          "name": "magic_program",
+          "address": "Magic11111111111111111111111111111111111111"
+        },
+        {
+          "name": "magic_context",
+          "writable": true,
+          "address": "MagicContext1111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "undelegate_player",
+      "discriminator": [
+        230,
+        242,
+        176,
+        199,
+        120,
+        26,
+        119,
+        243
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "player",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "magic_program",
+          "address": "Magic11111111111111111111111111111111111111"
+        },
+        {
+          "name": "magic_context",
+          "writable": true,
+          "address": "MagicContext1111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "update_book",
+      "discriminator": [
+        139,
+        171,
+        95,
+        98,
+        162,
+        186,
+        133,
+        139
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "book"
+          ]
+        },
+        {
+          "name": "book",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  111,
+                  107
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "BookParams"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "update_market",
+      "discriminator": [
+        153,
+        39,
+        2,
+        197,
+        179,
+        50,
+        199,
+        217
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "market"
+          ]
+        },
+        {
+          "name": "market",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "params",
+          "type": {
+            "defined": {
+              "name": "MarketParams"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "withdraw",
+      "discriminator": [
+        183,
+        18,
+        70,
+        156,
+        148,
+        109,
+        161,
+        34
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "signer": true
+        },
+        {
+          "name": "player",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_tokens",
+          "writable": true
+        },
+        {
+          "name": "vault_tokens",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116,
+                  45,
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  115
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Book",
+      "discriminator": [
+        121,
+        34,
+        121,
+        35,
+        91,
+        62,
+        85,
+        222
+      ]
+    },
+    {
+      "name": "Candles",
+      "discriminator": [
+        156,
+        97,
+        9,
+        60,
+        4,
+        241,
+        72,
+        137
+      ]
+    },
+    {
+      "name": "Market",
+      "discriminator": [
+        219,
+        190,
+        213,
+        55,
+        0,
+        227,
+        198,
+        154
+      ]
+    },
+    {
+      "name": "Player",
+      "discriminator": [
+        205,
+        222,
+        112,
+        7,
+        165,
+        155,
+        206,
+        218
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "TapPlaced",
+      "discriminator": [
+        73,
+        119,
+        130,
+        201,
+        143,
+        62,
+        253,
+        78
+      ]
+    },
+    {
+      "name": "TapSettled",
+      "discriminator": [
+        120,
+        55,
+        76,
+        103,
+        125,
+        87,
+        157,
+        170
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "InvalidOracle",
+      "msg": "Price account is not a MagicBlock oracle feed"
+    },
+    {
+      "code": 6001,
+      "name": "WrongOracle",
+      "msg": "Price account does not match this market"
+    },
+    {
+      "code": 6002,
+      "name": "StaleOracle",
+      "msg": "Oracle price is too old"
+    },
+    {
+      "code": 6003,
+      "name": "InvalidParams",
+      "msg": "Invalid market or book parameters"
+    },
+    {
+      "code": 6004,
+      "name": "Unauthorized",
+      "msg": "Signer may not act for this player"
+    },
+    {
+      "code": 6005,
+      "name": "ZeroAmount",
+      "msg": "Amount must be greater than zero"
+    },
+    {
+      "code": 6006,
+      "name": "InsufficientBalance",
+      "msg": "Not enough balance"
+    },
+    {
+      "code": 6007,
+      "name": "InsufficientShares",
+      "msg": "Not enough LP shares"
+    },
+    {
+      "code": 6008,
+      "name": "Overflow",
+      "msg": "Arithmetic overflow"
+    },
+    {
+      "code": 6009,
+      "name": "ColumnClosed",
+      "msg": "This column is locked or too far ahead"
+    },
+    {
+      "code": 6010,
+      "name": "MultiplierOutOfRange",
+      "msg": "The box is outside the tradable multiplier range"
+    },
+    {
+      "code": 6011,
+      "name": "Slippage",
+      "msg": "The multiplier moved below the minimum you accepted"
+    },
+    {
+      "code": 6012,
+      "name": "ProfitTooLarge",
+      "msg": "This tap would win more than the per-tap limit"
+    },
+    {
+      "code": 6013,
+      "name": "ExposureLimit",
+      "msg": "The house cannot cover this tap right now"
+    },
+    {
+      "code": 6014,
+      "name": "TooManyTaps",
+      "msg": "All tap slots are in use"
+    },
+    {
+      "code": 6015,
+      "name": "NoOpenTap",
+      "msg": "No open tap in this slot"
+    },
+    {
+      "code": 6016,
+      "name": "SettleTooEarly",
+      "msg": "This tap cannot be settled yet"
+    },
+    {
+      "code": 6017,
+      "name": "LiquidityLocked",
+      "msg": "Liquidity is committed to open taps"
+    },
+    {
+      "code": 6018,
+      "name": "FaucetLimit",
+      "msg": "Faucet only tops up wallets below its limit"
+    }
+  ],
+  "types": [
+    {
+      "name": "Book",
+      "docs": [
+        "The house: one shared liquidity pool that takes the other side of every tap.",
+        "Lives on the ER so taps and settlements touch it in milliseconds."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "docs": [
+              "Test-USD mint players deposit (6 decimals)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "liquidity",
+            "docs": [
+              "Pool value in mint units, including stakes of open taps."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "total_shares",
+            "type": "u64"
+          },
+          {
+            "name": "exposure",
+            "docs": [
+              "Sum of the payouts the pool owes if every open tap wins."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "edge_bps",
+            "docs": [
+              "House edge taken from the fair multiplier, in basis points."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "min_mult_bps",
+            "type": "u32"
+          },
+          {
+            "name": "max_mult_bps",
+            "type": "u32"
+          },
+          {
+            "name": "max_exposure_bps",
+            "docs": [
+              "Most of the pool that open payouts may claim, in basis points."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "max_profit",
+            "docs": [
+              "Largest profit a single tap may win, in mint units."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "volume",
+            "type": "u64"
+          },
+          {
+            "name": "taps",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BookParams",
+      "docs": [
+        "Risk settings of the house."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "edge_bps",
+            "type": "u16"
+          },
+          {
+            "name": "min_mult_bps",
+            "type": "u32"
+          },
+          {
+            "name": "max_mult_bps",
+            "type": "u32"
+          },
+          {
+            "name": "max_exposure_bps",
+            "type": "u16"
+          },
+          {
+            "name": "max_profit",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Candles",
+      "docs": [
+        "Ring buffer of per-second price ranges, written on the ER by `record_tick`.",
+        "Slot `sec % CANDLE_SLOTS` holds the high and low the oracle published during `sec`."
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "docs": [
+              "Market key as raw bytes: `Pubkey` is not `Pod` in this dependency set."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "last_price",
+            "type": "i64"
+          },
+          {
+            "name": "last_publish_time",
+            "type": "i64"
+          },
+          {
+            "name": "ticks",
+            "type": "u64"
+          },
+          {
+            "name": "secs",
+            "type": {
+              "array": [
+                "i64",
+                256
+              ]
+            }
+          },
+          {
+            "name": "highs",
+            "type": {
+              "array": [
+                "i64",
+                256
+              ]
+            }
+          },
+          {
+            "name": "lows",
+            "type": {
+              "array": [
+                "i64",
+                256
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Market",
+      "docs": [
+        "One tradable asset (SOL/USD, BTC/USD, ...), keyed by its oracle price account.",
+        "The grid is fixed per market: rows are `band`-wide price bands, columns are `col_secs` long."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "oracle",
+            "type": "pubkey"
+          },
+          {
+            "name": "candles",
+            "type": "pubkey"
+          },
+          {
+            "name": "symbol",
+            "docs": [
+              "Ticker shown in the app, e.g. `SOL`, zero padded."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                8
+              ]
+            }
+          },
+          {
+            "name": "band",
+            "docs": [
+              "Height of one row, in oracle price units (1e-8 USD)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "col_secs",
+            "docs": [
+              "Length of one column in seconds."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "sigma_floor",
+            "docs": [
+              "Lowest per-second volatility used for odds, in price units per sqrt(second)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarketParams",
+      "docs": [
+        "Grid shape and volatility floor for a market."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "symbol",
+            "type": {
+              "array": [
+                "u8",
+                8
+              ]
+            }
+          },
+          {
+            "name": "band",
+            "type": "u64"
+          },
+          {
+            "name": "col_secs",
+            "type": "u32"
+          },
+          {
+            "name": "sigma_floor",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Player",
+      "docs": [
+        "A player's in-game wallet, LP position, session key and open taps. Delegated to the ER while",
+        "playing; deposits and withdrawals happen on the base layer."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "session",
+            "docs": [
+              "Browser-held key allowed to tap without wallet popups until `session_expires`."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "session_expires",
+            "type": "i64"
+          },
+          {
+            "name": "balance",
+            "docs": [
+              "Free balance in mint units."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "shares",
+            "docs": [
+              "LP shares of the book."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "next_id",
+            "type": "u32"
+          },
+          {
+            "name": "taps_placed",
+            "type": "u32"
+          },
+          {
+            "name": "wins",
+            "type": "u32"
+          },
+          {
+            "name": "streak",
+            "type": "u16"
+          },
+          {
+            "name": "best_streak",
+            "type": "u16"
+          },
+          {
+            "name": "pnl",
+            "docs": [
+              "Realised profit and loss from taps, in mint units."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "taps",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "TapSlot"
+                  }
+                },
+                12
+              ]
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TapPlaced",
+      "docs": [
+        "A tap was placed. `price` and `sigma` are the inputs the on-chain odds were computed from."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "player",
+            "type": "pubkey"
+          },
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "id",
+            "type": "u32"
+          },
+          {
+            "name": "slot",
+            "type": "u8"
+          },
+          {
+            "name": "lo",
+            "type": "i64"
+          },
+          {
+            "name": "hi",
+            "type": "i64"
+          },
+          {
+            "name": "start",
+            "type": "i64"
+          },
+          {
+            "name": "end",
+            "type": "i64"
+          },
+          {
+            "name": "stake",
+            "type": "u64"
+          },
+          {
+            "name": "mult_bps",
+            "type": "u32"
+          },
+          {
+            "name": "price",
+            "type": "i64"
+          },
+          {
+            "name": "publish_time",
+            "type": "i64"
+          },
+          {
+            "name": "sigma",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TapSettled",
+      "docs": [
+        "A tap was settled. `low`/`high` are the price range recorded during the window: the evidence",
+        "anyone can re-check against the candle ring."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "player",
+            "type": "pubkey"
+          },
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "id",
+            "type": "u32"
+          },
+          {
+            "name": "outcome",
+            "docs": [
+              "1 = win, 2 = lose, 3 = void (refunded)."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "lo",
+            "type": "i64"
+          },
+          {
+            "name": "hi",
+            "type": "i64"
+          },
+          {
+            "name": "start",
+            "type": "i64"
+          },
+          {
+            "name": "end",
+            "type": "i64"
+          },
+          {
+            "name": "stake",
+            "type": "u64"
+          },
+          {
+            "name": "payout",
+            "type": "u64"
+          },
+          {
+            "name": "low",
+            "type": "i64"
+          },
+          {
+            "name": "high",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TapSlot",
+      "docs": [
+        "One open position: a stake on the price touching `[lo, hi]` during `[start, end)`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "lo",
+            "type": "i64"
+          },
+          {
+            "name": "hi",
+            "type": "i64"
+          },
+          {
+            "name": "start",
+            "type": "i64"
+          },
+          {
+            "name": "end",
+            "type": "i64"
+          },
+          {
+            "name": "stake",
+            "type": "u64"
+          },
+          {
+            "name": "mult_bps",
+            "type": "u32"
+          },
+          {
+            "name": "id",
+            "docs": [
+              "Monotonic per-player id so the app can match settlements to taps."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "open",
+            "type": "bool"
+          }
+        ]
+      }
+    }
+  ]
+}
