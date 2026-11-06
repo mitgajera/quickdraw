@@ -1,0 +1,39 @@
+# deps
+node_modules/
+.pnpm-store/
+
+# builds
+.next/
+dist/
+build/
+out/
+.turbo/
+.vercel/
+*.tsbuildinfo
+next-env.d.ts
+
+# anchor / rust
+target/
+.anchor/
+test-ledger/
+**/*.rs.bk
+
+# env & secrets — never commit keys or wallets
+.env
+.env.*
+!.env.example
+*.keypair.json
+id.json
+wallets/
+
+# design previews
+.brand-preview/
+
+# logs & OS
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
