@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletReadyState } from "@solana/wallet-adapter-base";
-import { Transaction } from "@solana/web3.js";
+import { ComputeBudgetProgram, Transaction } from "@solana/web3.js";
 import { USD, explainError, ix, sendSigned, type Symbol } from "@quickdraw/sdk";
 import { Board } from "./Board";
 import { useAccount, type Stage } from "@/lib/account";
@@ -13,6 +13,7 @@ import { sound } from "@/lib/sound";
 
 const SYMBOLS: Symbol[] = ["SOL", "BTC", "ETH"];
 const STAKES = [1, 5, 10, 25];
+const TAP_COMPUTE_UNITS = 400_000;
 const DECIMALS: Record<Symbol, number> = { SOL: 4, BTC: 1, ETH: 2 };
 const usd = (v: bigint | number) => {
   const n = typeof v === "bigint" ? Number(v) / 1e6 : v;
@@ -85,7 +86,8 @@ export function Game() {
     const key = `${column}:${bandIndex}:${Date.now()}`;
     model.pending.push({ key, bandIndex, column, stake: amount, multBps, at: Date.now() / 1000 });
     try {
-      const tx = new Transaction().add(ix.placeTap({
+      // on-chain window pricing needs ~250k compute units; rollup transactions are free
+      const tx = new Transaction().add(ComputeBudgetProgram.setComputeUnitLimit({ units: TAP_COMPUTE_UNITS }), ix.placeTap({
         signer: session.publicKey, owner: signer.publicKey, market: model.keys,
         bandIndex, column, stake: amount, minMultBps: Math.floor(multBps * 0.85),
       }));
