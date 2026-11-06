@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { boxAt, quoteBox, sigmaFor } from "@quickdraw/sdk";
+import { boxAt, quoteBox, rowHeight, sigmaFor } from "@quickdraw/sdk";
 import type { LiveModel, Result } from "@/lib/live";
 
 interface Tokens { bg: string; board: string; ink: string; mute: string; accent: string; price: string; win: string; loss: string }
@@ -26,7 +26,7 @@ interface Props {
   model: LiveModel;
   stake: number;
   canTap: boolean;
-  onTap: (bandIndex: bigint, column: number, multBps: number) => void;
+  onTap: (bandIndex: bigint, column: number, zoom: number, multBps: number) => void;
   /** Tapped a box the house does not offer right now. */
   onReject?: (reason: "locked" | "too-far" | "unpriced" | "range", side: "near" | "far") => void;
 }
@@ -68,13 +68,13 @@ export function Board({ model, stake, canTap, onTap, onReject }: Props) {
     const quoteAt = (k: number, j: number) => {
       const { market, book, price, publishTime, candles } = model;
       if (!market || !book || price === null) return null;
-      return quoteBox(book, boxAt(market, BigInt(j), k), price, publishTime, sigmaFor(market, candles, publishTime));
+      return quoteBox(book, boxAt(market, BigInt(j), k, model.zoom), price, publishTime, sigmaFor(market, candles, publishTime));
     };
 
     const offResult = model.onResult((r: Result) => {
       if (r.outcome !== "win") return;
-      const k = r.tap.start / L.col, j = Number(r.tap.lo / BigInt(Math.round(L.band * 1e8)));
-      const x = xOf(k * L.col) + L.colPx / 2, y = yOf((j + 1) * L.band) + L.rowPx / 2;
+      const x = xOf(r.tap.start) + L.colPx / 2;
+      const y = (yOf(Number(r.tap.hi + 1n) / 1e8) + yOf(Number(r.tap.lo) / 1e8)) / 2;
       floats.push({ x, y, txt: "+" + money(Number(r.payout) / 1e6), age: 0 });
       if (navigator.vibrate) navigator.vibrate(30);
       if (reduced) return;
@@ -92,12 +92,12 @@ export function Board({ model, stake, canTap, onTap, onReject }: Props) {
       const q = quoteAt(c.k, c.j);
       if (!q) return;
       if (!q.ok) {
-        const priceBand = model.price !== null && model.market ? Number(model.price / model.market.band) : c.j;
+        const priceBand = model.price !== null && model.market ? Number(model.price / rowHeight(model.market, model.zoom)) : c.j;
         props.current.onReject?.(q.reason, Math.abs(c.j - priceBand) <= 2 ? "near" : "far");
         return;
       }
       ripples.push({ k: c.k, j: c.j, age: 0 });
-      props.current.onTap(BigInt(c.j), c.k, q.multBps);
+      props.current.onTap(BigInt(c.j), c.k, model.zoom, q.multBps);
     };
     cvs.addEventListener("pointermove", onMove);
     cvs.addEventListener("pointerleave", onLeave);
@@ -129,7 +129,7 @@ export function Board({ model, stake, canTap, onTap, onReject }: Props) {
         return;
       }
 
-      const band = Number(market.band) / 1e8, col = market.colSecs;
+      const band = Number(rowHeight(market, model.zoom)) / 1e8, col = market.colSecs;
       const rt = Date.now() / 1000 - model.clockOffset;
       const nowX = W * (W < 600 ? 0.24 : 0.3), AX = W - 52;
       const colPx = clamp((AX - nowX) / 5, 70, 150), rowPx = clamp(H / 11, 36, 54);
@@ -153,7 +153,7 @@ export function Board({ model, stake, canTap, onTap, onReject }: Props) {
       ctx.save(); ctx.beginPath(); ctx.rect(nowX, 0, AX - nowX, H); ctx.clip();
       const heat = new Map<string, number>();
       for (const o of model.others) for (const t of o.taps) {
-        const key = `${t.start / col}:${Number(t.lo / market.band)}`; heat.set(key, (heat.get(key) ?? 0) + 1);
+        const key = `${t.start / col}:${t.lo}`; heat.set(key, (heat.get(key) ?? 0) + 1);
       }
       const fs = clamp(rowPx * 0.3, 11, 14);
       ctx.font = `500 ${fs}px ${monoFont}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
@@ -162,8 +162,9 @@ export function Board({ model, stake, canTap, onTap, onReject }: Props) {
         if (x1 <= nowX) continue;
         for (let j = jMin; j <= jMax; j++) {
           const y0 = yOf((j + 1) * band), y1 = yOf(j * band), w = x1 - x0, h = y1 - y0;
-          const q = quoteBox(book, boxAt(market, BigInt(j), k), price, model.publishTime, sigma);
-          const n = heat.get(`${k}:${j}`) ?? 0;
+          const box = boxAt(market, BigInt(j), k, model.zoom);
+          const q = quoteBox(book, box, price, model.publishTime, sigma);
+          const n = heat.get(`${k}:${box.lo}`) ?? 0;
           if (n) { ctx.fillStyle = rgba(T.accent, Math.min(0.16, n * 0.04)); ctx.fillRect(x0, y0, w, h); }
           if (!q.ok) {
             if (q.reason === "locked") { ctx.fillStyle = rgba(T.ink, 0.025); ctx.fillRect(x0, y0, w, h); }
@@ -175,7 +176,7 @@ export function Board({ model, stake, canTap, onTap, onReject }: Props) {
             ctx.fillStyle = rgba(T.accent, 0.14); ctx.fillRect(x0, y0, w, h);
             ctx.strokeStyle = T.accent; ctx.lineWidth = 1.5; ctx.strokeRect(x0 + 0.75, y0 + 0.75, w - 1.5, h - 1.5);
           }
-          const t = clamp(Math.log(q.multBps / 11_000) / Math.log(250_000 / 11_000), 0, 1);
+          const t = clamp(Math.log(q.multBps / book.minMultBps) / Math.log(book.maxMultBps / book.minMultBps), 0, 1);
           ctx.fillStyle = mix(T.mute, T.accent, t);
           ctx.fillText(fmtMult(q.multBps), x0 + w / 2, y0 + h / 2 + 0.5);
         }
@@ -187,12 +188,13 @@ export function Board({ model, stake, canTap, onTap, onReject }: Props) {
 
       // bets: mine (open, pending, settled) and everyone else's
       ctx.save(); ctx.beginPath(); ctx.rect(0, 0, AX, H); ctx.clip();
-      const cellRect = (start: number, lo: bigint) => {
-        const j = Number(lo / market.band);
-        return { x: xOf(start), y: yOf((j + 1) * band), w: colPx, h: rowPx };
+      // bets are drawn by their own price range, so they stay put when the grid zooms
+      const cellRect = (start: number, lo: bigint, hi: bigint) => {
+        const top = yOf(Number(hi + 1n) / 1e8), bottom = yOf(Number(lo) / 1e8);
+        return { x: xOf(start), y: top, w: colPx, h: bottom - top };
       };
       for (const r of model.results) {
-        const c = cellRect(r.tap.start, r.tap.lo);
+        const c = cellRect(r.tap.start, r.tap.lo, r.tap.hi);
         if (c.x + c.w < 0) continue;
         if (r.outcome === "win") drawBlock(c.x, c.y, c.w, c.h, T.win, "+" + money(Number(r.payout) / 1e6), T.bg);
         else if (r.outcome === "lose") drawBlock(c.x, c.y, c.w, c.h, rgba(T.loss, 0.16), money(-Number(r.tap.stake) / 1e6), T.loss, clamp(1 - (Date.now() / 1000 - r.at) / 3, 0.25, 1));
@@ -200,7 +202,7 @@ export function Board({ model, stake, canTap, onTap, onReject }: Props) {
       }
       for (const t of model.player?.taps ?? []) {
         if (!t.open || !t.market.equals(model.keys.market)) continue;
-        const c = cellRect(t.start, t.lo);
+        const c = cellRect(t.start, t.lo, t.hi);
         drawBlock(c.x, c.y, c.w, c.h, T.accent, betLabel(Number(t.stake), t.multBps, c.w), T.bg);
         if (rt >= t.start && rt < t.end) {
           // live window: pulsing outline and a bar draining as the column runs out
@@ -213,7 +215,7 @@ export function Board({ model, stake, canTap, onTap, onReject }: Props) {
       for (const cf of model.confirms) {
         const age = Date.now() / 1000 - cf.at;
         if (age > 1.4) continue;
-        const c = cellRect(cf.column * col, cf.bandIndex * market.band);
+        const c = cellRect(cf.column * col, cf.lo, cf.hi);
         const txt = `✓ ${cf.ms}ms`;
         ctx.font = `600 11px ${monoFont}`;
         const tw = ctx.measureText(txt).width + 12;
@@ -224,13 +226,13 @@ export function Board({ model, stake, canTap, onTap, onReject }: Props) {
         ctx.globalAlpha = 1;
       }
       for (const p of model.pending) {
-        const c = cellRect(p.column * col, p.bandIndex * market.band);
+        const c = cellRect(p.column * col, p.lo, p.hi);
         drawBlock(c.x, c.y, c.w, c.h, rgba(T.accent, 0.45), betLabel(Number(p.stake), p.multBps, c.w), T.bg, 0.6 + 0.3 * Math.sin(nowMs / 120));
       }
       for (const o of model.others) {
         const h = hash(o.owner.toBase58());
         for (const t of o.taps) {
-          const c = cellRect(t.start, t.lo);
+          const c = cellRect(t.start, t.lo, t.hi);
           ctx.fillStyle = [T.accent, T.win, T.ink, T.mute][Math.floor(h * 4)]!;
           ctx.globalAlpha = 0.85;
           ctx.beginPath(); ctx.arc(c.x + 8 + h * (c.w - 16), c.y + 7 + ((h * 7) % 1) * (c.h - 14), 3.2, 0, Math.PI * 2); ctx.fill();
@@ -281,7 +283,7 @@ export function Board({ model, stake, canTap, onTap, onReject }: Props) {
       // price axis + tag
       ctx.fillStyle = T.board; ctx.fillRect(AX, 0, W - AX, H);
       ctx.strokeStyle = rgba(T.ink, 0.08); ctx.beginPath(); ctx.moveTo(AX + 0.5, 0); ctx.lineTo(AX + 0.5, H); ctx.stroke();
-      const decimals = band >= 1 ? 0 : 2;
+      const decimals = band >= 1 ? 0 : band >= 0.1 ? 1 : band >= 0.01 ? 2 : 3;
       ctx.font = `500 10.5px ${monoFont}`; ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillStyle = T.mute;
       for (let j = jMin; j <= jMax; j += 2) ctx.fillText((j * band).toFixed(decimals), AX + 5, yOf(j * band));
       const tagH = 20, ty = clamp(hy - tagH / 2, 2, H - tagH - 2);

@@ -3,14 +3,14 @@
 import type { PublicKey } from "@solana/web3.js";
 import {
   CANDLE_SLOTS, PLAYER_SIZE, PROGRAM_ID, bookPda, decodeBook, decodeCandles, decodeMarket, decodeOracle,
-  decodePlayer, judge, marketKeys, payoutOf, playerPda,
+  decodePlayer, idealZoom, judge, marketKeys, payoutOf, playerPda, sigmaFor,
   type Book, type Candles, type Market, type MarketKeys, type Player, type Symbol, type TapSlot,
 } from "@quickdraw/sdk";
 import { base, er } from "./chain";
 
 export interface PricePoint { t: number; p: number }
 export interface Result { tap: TapSlot; outcome: "win" | "lose" | "void"; at: number; payout: bigint }
-export interface Pending { key: string; bandIndex: bigint; column: number; stake: bigint; multBps: number; at: number }
+export interface Pending { key: string; lo: bigint; hi: bigint; column: number; stake: bigint; multBps: number; at: number }
 export interface FeedItem { id: string; who: string; me: boolean; text: string; tone: "win" | "loss" | "" }
 export interface Leader { owner: string; pnl: bigint; wins: number; taps: number; me: boolean }
 
@@ -35,7 +35,10 @@ export class LiveModel {
   results: Result[] = [];
   pending: Pending[] = [];
   /** "✓ 52ms" chips drawn over freshly confirmed taps */
-  confirms: { column: number; bandIndex: bigint; ms: number; at: number }[] = [];
+  confirms: { column: number; lo: bigint; hi: bigint; ms: number; at: number }[] = [];
+  /** Grid zoom (rows are `market.band << zoom`), chosen from live volatility with hysteresis. */
+  zoom = 0;
+  private zoomVotes = 0;
   online = 0;
   erOk = true;
   version = 0;
@@ -136,7 +139,7 @@ export class LiveModel {
     }
     // drop pending taps the chain now shows
     this.pending = this.pending.filter((p) => !next.taps.some((t) => t.open && t.start === p.column * (this.market?.colSecs ?? 4)
-      && t.lo === p.bandIndex * (this.market?.band ?? 0n)));
+      && t.lo === p.lo));
     const horizon = Date.now() / 1000 - 90;
     this.results = this.results.filter((r) => r.at > horizon);
     this.confirms = this.confirms.filter((c) => c.at > Date.now() / 1000 - 2);
@@ -156,7 +159,17 @@ export class LiveModel {
       if (book) this.book = decodeBook(book.data);
       if (market) this.market = decodeMarket(market.data);
       else if (!this.market) await this.loadMarket();
+      this.updateZoom();
     } catch { /* next round */ }
+  }
+
+  /** Follows the ideal zoom, but only after it has held for 3 seconds so the grid does not flicker. */
+  private updateZoom() {
+    const { market, book, price, candles, publishTime } = this;
+    if (!market || !book || price === null) return;
+    const ideal = idealZoom(market, book, price, publishTime, sigmaFor(market, candles, publishTime));
+    if (ideal === this.zoom) { this.zoomVotes = 0; return; }
+    if (++this.zoomVotes >= 3 || this.hist.length < 10) { this.zoom = ideal; this.zoomVotes = 0; }
   }
 
   /** Seeds the chart from the on-chain candle ring so it is never empty on load. */

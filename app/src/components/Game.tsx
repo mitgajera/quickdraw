@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletReadyState } from "@solana/wallet-adapter-base";
 import { ComputeBudgetProgram, Transaction } from "@solana/web3.js";
-import { USD, explainError, ix, sendSigned, type Symbol } from "@quickdraw/sdk";
+import { USD, explainError, ix, rowHeight, sendSigned, type Symbol } from "@quickdraw/sdk";
 import { Board } from "./Board";
 import { useAccount, type Stage } from "@/lib/account";
 import { erBlockhash, er, forgetGuest, guestSigner, prefs, sessionKey, type AppSigner } from "@/lib/chain";
@@ -76,7 +76,7 @@ export function Game() {
   const player = model.player;
   const openTaps = player?.taps.filter((t) => t.open).length ?? 0;
 
-  const onTap = useCallback(async (bandIndex: bigint, column: number, multBps: number) => {
+  const onTap = useCallback(async (bandIndex: bigint, column: number, zoom: number, multBps: number) => {
     if (account.stage !== "ready" || !signer) return;
     const session = sessionKey(signer.publicKey, false);
     if (!session) return;
@@ -84,12 +84,13 @@ export function Game() {
     if (!player || player.balance < amount) { say("Not enough balance for that stake", true); return; }
     sound.tap();
     const key = `${column}:${bandIndex}:${Date.now()}`;
-    model.pending.push({ key, bandIndex, column, stake: amount, multBps, at: Date.now() / 1000 });
+    const h = rowHeight(model.market!, zoom), lo = bandIndex * h, hi = lo + h - 1n;
+    model.pending.push({ key, lo, hi, column, stake: amount, multBps, at: Date.now() / 1000 });
     try {
       // on-chain window pricing needs ~250k compute units; rollup transactions are free
       const tx = new Transaction().add(ComputeBudgetProgram.setComputeUnitLimit({ units: TAP_COMPUTE_UNITS }), ix.placeTap({
         signer: session.publicKey, owner: signer.publicKey, market: model.keys,
-        bandIndex, column, stake: amount, minMultBps: Math.floor(multBps * 0.85),
+        bandIndex, column, zoom, stake: amount, minMultBps: Math.floor(multBps * 0.85),
       }));
       tx.recentBlockhash = await erBlockhash();
       tx.feePayer = session.publicKey;
@@ -97,7 +98,7 @@ export function Game() {
       const r = await sendSigned(er, tx, { skipPreflight: true, pollMs: 15 });
       const ms = Math.round(r.ms);
       sound.confirm();
-      model.confirms.push({ column, bandIndex, ms, at: Date.now() / 1000 });
+      model.confirms.push({ column, lo, hi, ms, at: Date.now() / 1000 });
       setLatency(ms); setFlash(true); setTimeout(() => setFlash(false), 900);
       model.pushFeed({ id: r.signature, who: "you", me: true, tone: "", text: `${usd(amount)} · ${(multBps / 1e4).toFixed(1)}x` });
     } catch (e) {
@@ -110,7 +111,7 @@ export function Game() {
     say(reason === "locked" ? "That column is about to open — tap one further right"
       : reason === "too-far" ? "That column is more than two minutes out"
       : side === "near" ? "Too close to call — no payout offered on that box"
-      : "Beyond the 25x cap — pick a box closer to the price");
+      : "Beyond the house's top multiplier — pick a box closer to the price");
   }, [say]);
 
   const connectWallet = async (name: string) => {

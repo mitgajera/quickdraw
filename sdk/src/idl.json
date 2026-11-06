@@ -1331,6 +1331,10 @@
           "type": "i64"
         },
         {
+          "name": "zoom",
+          "type": "u8"
+        },
+        {
           "name": "stake",
           "type": "u64"
         },

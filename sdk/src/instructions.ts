@@ -135,10 +135,10 @@ export const ix = {
 
   placeTap: (a: {
     signer: PublicKey; owner: PublicKey; market: MarketKeys;
-    bandIndex: bigint; column: number; stake: bigint; minMultBps: number;
+    bandIndex: bigint; column: number; zoom: number; stake: bigint; minMultBps: number;
   }) =>
     buildIx("place_tap", { ...playerAccounts(a.owner), ...marketAccounts(a.market), signer: a.signer }, {
-      band_index: a.bandIndex, column: a.column, stake: a.stake, min_mult_bps: a.minMultBps,
+      band_index: a.bandIndex, column: a.column, zoom: a.zoom, stake: a.stake, min_mult_bps: a.minMultBps,
     }),
 
   faucet: (owner: PublicKey) => buildIx("faucet", playerAccounts(owner)),
