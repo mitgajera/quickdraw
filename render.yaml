@@ -1,0 +1,19 @@
+# Render blueprint for the always-on keeper. In Render: New → Blueprint → pick this repo.
+# Set KEEPER_SECRET in the dashboard to the operator keypair's JSON array (it is never committed).
+# The free plan sleeps after ~15 minutes without HTTP traffic, which stops ticks and settlement:
+# use starter, or keep /health pinged every few minutes.
+services:
+  - type: web
+    name: quickdraw-keeper
+    runtime: docker
+    dockerfilePath: ./keeper/Dockerfile
+    dockerContext: .
+    plan: starter
+    region: singapore
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: KEEPER_SECRET
+        sync: false
+      - key: MARKETS
+        value: SOL,BTC,ETH
