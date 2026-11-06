@@ -10,7 +10,7 @@ pub mod state;
 
 pub use instructions::*;
 
-declare_id!("ALSvgxDgSnXBdHYVgZtBW69CBusRn6s5Q17Wzn36aT8D");
+declare_id!("7TBHSjenh1DFt7C8vnNVfXDLbZ3cCgEeAa4XcTUvF6Au");
 
 pub const MARKET_SEED: &[u8] = b"mkt";
 pub const CANDLES_SEED: &[u8] = b"candles";

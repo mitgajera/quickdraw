@@ -6,10 +6,10 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-quickdraw = "ALSvgxDgSnXBdHYVgZtBW69CBusRn6s5Q17Wzn36aT8D"
+quickdraw = "7TBHSjenh1DFt7C8vnNVfXDLbZ3cCgEeAa4XcTUvF6Au"
 
 [programs.localnet]
-quickdraw = "11111111111111111111111111111111"
+quickdraw = "7TBHSjenh1DFt7C8vnNVfXDLbZ3cCgEeAa4XcTUvF6Au"
 
 [provider]
 cluster = "devnet"
