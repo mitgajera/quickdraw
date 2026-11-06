@@ -55,6 +55,61 @@ impl Candles {
         let idx = (sec.rem_euclid(CANDLE_SLOTS as i64)) as usize;
         (self.secs[idx] == sec).then(|| (self.highs[idx], self.lows[idx]))
     }
+
+    /// Per-second volatility (price units per sqrt(second)) from the moves between the midpoints
+    /// of recorded seconds in `(now - window, now]`. `None` with fewer than `MIN_VOL_SAMPLES` moves.
+    pub fn sigma(&self, now: i64, window: i64) -> Option<f64> {
+        let mut prev: Option<(i64, f64)> = None;
+        let (mut sum, mut moves) = (0.0f64, 0u32);
+        for sec in (now - window + 1)..=now {
+            if let Some((high, low)) = self.range_at(sec) {
+                let mid = (high as f64 + low as f64) / 2.0;
+                if let Some((prev_sec, prev_mid)) = prev {
+                    sum += (mid - prev_mid).powi(2) / (sec - prev_sec) as f64;
+                    moves += 1;
+                }
+                prev = Some((sec, mid));
+            }
+        }
+        (moves >= MIN_VOL_SAMPLES).then(|| (sum / moves as f64).sqrt())
+    }
+
+    /// Decides a tap on the band `[lo, hi]` for the seconds `[start, end)`, given that the ring holds
+    /// data up to second `now`. Prices move continuously, so every price between the lowest low and
+    /// the highest high seen in the window was traded: the box wins if that range meets the band.
+    /// Wins are final as soon as they happen; a loss needs the whole window to have passed.
+    pub fn judge(&self, lo: i64, hi: i64, start: i64, end: i64, now: i64) -> Outcome {
+        match self.window_range(start, end.min(now + 1)) {
+            Some((low, high)) if high >= lo && low <= hi => Outcome::Win,
+            _ if now < end => Outcome::Pending,
+            Some(_) => Outcome::Lose,
+            None => Outcome::Void,
+        }
+    }
+
+    /// Lowest low and highest high recorded for the seconds `[start, end)`.
+    pub fn window_range(&self, start: i64, end: i64) -> Option<(i64, i64)> {
+        (start..end)
+            .filter_map(|sec| self.range_at(sec))
+            .fold(None, |acc, (high, low)| match acc {
+                None => Some((low, high)),
+                Some((min, max)) => Some((min.min(low), max.max(high))),
+            })
+    }
+}
+
+/// Moves needed before the candle ring's volatility estimate is trusted over the market floor.
+pub const MIN_VOL_SAMPLES: u32 = 5;
+
+/// How a tap resolves against the recorded candles.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Outcome {
+    /// The window is still open and the price has not touched the box yet.
+    Pending,
+    Win,
+    Lose,
+    /// No price data was recorded for the window: the stake is refunded.
+    Void,
 }
 
 #[cfg(test)]
@@ -91,6 +146,56 @@ mod tests {
         c.record(200, 1_000 + CANDLE_SLOTS as i64);
         assert_eq!(c.range_at(1_000), None);
         assert_eq!(c.range_at(1_000 + CANDLE_SLOTS as i64), Some((200, 200)));
+    }
+
+    fn walk(c: &mut Candles, from: i64, prices: &[(i64, i64)]) {
+        for (i, (high, low)) in prices.iter().enumerate() {
+            c.record(*high, from + i as i64);
+            c.record(*low, from + i as i64);
+        }
+    }
+
+    #[test]
+    fn judges_wins_losses_and_voids() {
+        let mut c = empty();
+        // seconds 100..=104 trade between 1_000 and 1_030
+        walk(
+            &mut c,
+            100,
+            &[
+                (1_010, 1_000),
+                (1_020, 1_005),
+                (1_030, 1_015),
+                (1_025, 1_012),
+                (1_018, 1_010),
+            ],
+        );
+        // band touched by the second-102 high: win as soon as that second is recorded
+        assert_eq!(c.judge(1_028, 1_040, 101, 104, 102), Outcome::Win);
+        // not touched yet and the window is still open
+        assert_eq!(c.judge(1_028, 1_040, 101, 104, 101), Outcome::Pending);
+        // never touched once the window passed
+        assert_eq!(c.judge(1_031, 1_040, 101, 104, 104), Outcome::Lose);
+        // price crossed the band between two recorded seconds (continuity)
+        let mut gap = empty();
+        walk(&mut gap, 200, &[(1_000, 1_000)]);
+        walk(&mut gap, 202, &[(1_100, 1_100)]);
+        assert_eq!(gap.judge(1_040, 1_060, 200, 203, 203), Outcome::Win);
+        // no data for the window at all
+        assert_eq!(c.judge(1_000, 1_100, 150, 154, 160), Outcome::Void);
+    }
+
+    #[test]
+    fn estimates_volatility_from_recent_seconds() {
+        let mut c = empty();
+        assert_eq!(c.sigma(110, 30), None);
+        // midpoints alternate by 10 each second -> sigma = 10
+        for s in 0..12 {
+            let p = if s % 2 == 0 { 1_000 } else { 1_010 };
+            c.record(p, 100 + s);
+        }
+        let sigma = c.sigma(111, 30).unwrap();
+        assert!((sigma - 10.0).abs() < 1e-9);
     }
 
     #[test]
