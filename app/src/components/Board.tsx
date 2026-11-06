@@ -121,7 +121,7 @@ export function Board({ model, stake, canTap, onTap }: Props) {
 
       const band = Number(market.band) / 1e8, col = market.colSecs;
       const rt = Date.now() / 1000 - model.clockOffset;
-      const nowX = W * (W < 600 ? 0.26 : 0.34), AX = W - 52;
+      const nowX = W * (W < 600 ? 0.24 : 0.3), AX = W - 52;
       const colPx = clamp((AX - nowX) / 5, 70, 150), rowPx = clamp(H / 11, 36, 54);
       L = { rt, nowX, colPx, rowPx, pps: colPx / col, band, col, AX };
       const latest = Number(price) / 1e8;
@@ -209,20 +209,35 @@ export function Board({ model, stake, canTap, onTap }: Props) {
       }
       ctx.restore();
 
-      // price line: smoothed through midpoints, ending at the eased head
-      const pts = hist.filter((h) => xOf(h.t) > -20);
+      // price line: oracle updates arrive as steps, so filter them in time (EMA, tau 0.35s) and
+      // draw a Catmull-Rom curve through the result, ending at the eased head
+      const pts = hist.filter((h) => xOf(h.t) > -40);
       if (pts.length > 1) {
-        const path = [...pts.map((h) => [xOf(h.t), yOf(h.p)] as const), [nowX, yOf(headP)] as const];
+        const path: [number, number][] = [];
+        let s = pts[0]!.p, prevT = pts[0]!.t;
+        for (const h of pts) {
+          s += (h.p - s) * (1 - Math.exp(-(h.t - prevT) / 0.35));
+          prevT = h.t;
+          path.push([xOf(h.t), yOf(s)]);
+        }
+        // the head continues the same filter up to "now", so the dot sits on the curve
+        headP = s + (latest - s) * (1 - Math.exp(-Math.max(0, rt - prevT) / 0.35));
+        path.push([nowX, yOf(headP)]);
         const trace = () => {
           ctx.beginPath(); ctx.moveTo(path[0]![0], path[0]![1]);
-          for (let i = 1; i < path.length - 1; i++) {
-            const [x, y] = path[i]!, [nx, ny] = path[i + 1]!;
-            ctx.quadraticCurveTo(x, y, (x + nx) / 2, (y + ny) / 2);
+          for (let i = 0; i < path.length - 1; i++) {
+            const p0 = path[Math.max(0, i - 1)]!, p1 = path[i]!, p2 = path[i + 1]!, p3 = path[Math.min(path.length - 1, i + 2)]!;
+            ctx.bezierCurveTo(
+              p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6,
+              p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6,
+              p2[0], p2[1],
+            );
           }
-          ctx.lineTo(path.at(-1)![0], path.at(-1)![1]);
         };
         const g = ctx.createLinearGradient(0, 0, 0, H);
-        g.addColorStop(0, rgba(T.price, 0.14)); g.addColorStop(1, rgba(T.price, 0));
+        // a dark price colour (light theme) needs a much lighter fill to stay subtle
+        const lum = hexRgb(T.price).reduce((a, v) => a + v, 0) / 765;
+        g.addColorStop(0, rgba(T.price, lum < 0.4 ? 0.05 : 0.14)); g.addColorStop(1, rgba(T.price, 0));
         trace(); ctx.lineTo(nowX, H); ctx.lineTo(path[0]![0], H); ctx.closePath(); ctx.fillStyle = g; ctx.fill();
         trace(); ctx.strokeStyle = T.price; ctx.lineWidth = 2; ctx.lineJoin = "round"; ctx.stroke();
       }
@@ -253,7 +268,7 @@ export function Board({ model, stake, canTap, onTap }: Props) {
         if (x1 - x0 < 30) continue;
         const lead = k * col - rt;
         ctx.fillStyle = lead <= 0 ? T.accent : T.mute;
-        ctx.fillText(lead <= 0 ? "LIVE" : `+${Math.ceil(lead)}S`, (x0 + x1) / 2, 7);
+        ctx.fillText(lead <= 0 ? "LIVE" : `${Math.ceil(lead)}s`, (x0 + x1) / 2, 7);
       }
 
       // effects
