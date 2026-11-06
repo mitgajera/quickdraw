@@ -6,9 +6,9 @@ import {
   PLAYER_SIZE, PROGRAM_ID, SETTLE_TIMEOUT_SECS, decodeCandles, decodePlayer, explainError, ix, judge,
   marketKeys, parseEvents, sendWithKeypairs, type Candles, type MarketKeys,
 } from "@quickdraw/sdk";
-import { config, loadKeypair } from "./config";
+import { config, keeperKeypair } from "./config";
 
-const keeper: Keypair = loadKeypair();
+const keeper: Keypair = keeperKeypair();
 const base = new Connection(config.baseRpc, "confirmed");
 const er = new Connection(config.erRpc, "confirmed");
 const markets: MarketKeys[] = config.markets.map(marketKeys);

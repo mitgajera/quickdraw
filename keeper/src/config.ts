@@ -21,6 +21,17 @@ export const config = {
   sponsorLamports: Number(env("SPONSOR_LAMPORTS", String(30_000_000))),
 };
 
+const parseSecret = (json: string) => Keypair.fromSecretKey(Uint8Array.from(JSON.parse(json) as number[]));
+
 export function loadKeypair(file = config.keypairPath): Keypair {
-  return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(file, "utf8")) as number[]));
+  return parseSecret(fs.readFileSync(file, "utf8"));
+}
+
+/**
+ * The keeper's key: `KEEPER_SECRET` (the keypair file's JSON array, for hosts like Render where
+ * secrets are environment variables) or else the file at `KEEPER_KEYPAIR`.
+ */
+export function keeperKeypair(): Keypair {
+  const secret = process.env.KEEPER_SECRET?.trim();
+  return secret ? parseSecret(secret) : loadKeypair(config.keypairPath);
 }
