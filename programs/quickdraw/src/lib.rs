@@ -130,4 +130,7 @@ pub mod quickdraw {
         instructions::place_tap_handler(ctx, band_index, column, stake, min_mult_bps)
     }
 
+    pub fn settle(ctx: Context<Settle>) -> Result<()> {
+        instructions::settle_handler(ctx)
+    }
 }
