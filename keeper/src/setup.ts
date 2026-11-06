@@ -3,7 +3,7 @@
 import { Buffer } from "node:buffer";
 import { Connection, type PublicKey } from "@solana/web3.js";
 import {
-  DELEGATION_PROGRAM_ID, ER_VALIDATOR, USD, bookPda, buildIx, decodeBook, ix, marketKeys, playerPda,
+  DELEGATION_PROGRAM_ID, ER_VALIDATOR, USD, bookPda, buildIx, decodeBook, decodeMarket, ix, marketKeys, playerPda,
   sendWithKeypairs, type Symbol,
 } from "@quickdraw/sdk";
 import { config, loadKeypair } from "./config";
@@ -13,12 +13,18 @@ const base = new Connection(config.baseRpc, "confirmed");
 const er = new Connection(config.erRpc, "confirmed");
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Grid per market: row height and volatility floor in 1e-8 USD, 4-second columns. */
+/**
+ * Grid per market: row height and volatility floor in 1e-8 USD, 4-second columns. Rows are sized
+ * from recorded oracle data so a typical 4-second move crosses about one row (the chart moves),
+ * and floors sit near the calm-market volatility.
+ */
 const GRIDS: Record<Symbol, { band: bigint; sigmaFloor: bigint }> = {
-  SOL: { band: 4_000_000n, sigmaFloor: 1_800_000n },        // $0.04 rows, $0.018/sqrt(s)
-  BTC: { band: 500_000_000n, sigmaFloor: 200_000_000n },    // $5 rows, $2/sqrt(s)
-  ETH: { band: 20_000_000n, sigmaFloor: 8_000_000n },       // $0.20 rows, $0.08/sqrt(s)
+  // rows ~1.4x each market's realised per-second volatility, so every market moves and spreads alike
+  SOL: { band: 750_000n, sigmaFloor: 150_000n },          // $0.0075 rows, $0.0015/sqrt(s)
+  BTC: { band: 500_000_000n, sigmaFloor: 40_000_000n },   // $5 rows, $0.40/sqrt(s)
+  ETH: { band: 15_000_000n, sigmaFloor: 1_200_000n },     // $0.15 rows, $0.012/sqrt(s)
 };
+const COL_SECS = 4;
 const SEED_LIQUIDITY = 500n * USD;
 
 const owner = async (c: Connection, k: PublicKey) => (await c.getAccountInfo(k))?.owner;
@@ -40,10 +46,16 @@ if (!(await owner(base, book))) {
 for (const symbol of config.markets) {
   const m = marketKeys(symbol);
   const grid = GRIDS[symbol];
-  if (!(await owner(base, m.market))) {
-    await run(`init_market ${symbol}`, base, [buildIx("init_market", { ...known, oracle: m.oracle }, {
-      params: { symbol: [...Buffer.from(symbol.padEnd(8, "\0"))], band: grid.band, col_secs: 4, sigma_floor: grid.sigmaFloor },
-    })]);
+  const params = { symbol: [...Buffer.from(symbol.padEnd(8, "\0"))], band: grid.band, col_secs: COL_SECS, sigma_floor: grid.sigmaFloor };
+  const existing = await base.getAccountInfo(m.market);
+  if (!existing) {
+    await run(`init_market ${symbol}`, base, [buildIx("init_market", { ...known, oracle: m.oracle }, { params })]);
+  } else {
+    // reconcile: markets are not delegated, so the ER picks up base-layer updates within ~1s
+    const cur = decodeMarket(existing.data);
+    if (cur.band !== grid.band || cur.sigmaFloor !== grid.sigmaFloor || cur.colSecs !== COL_SECS) {
+      await run(`update_market ${symbol}`, base, [buildIx("update_market", { ...known, market: m.market }, { params })]);
+    }
   }
   if (!(await owner(base, m.candles))?.equals(DELEGATION_PROGRAM_ID)) {
     await run(`delegate candles ${symbol}`, base, [buildIx("delegate_candles", { ...known, market: m.market, "market.oracle": m.oracle }, {}, [ER_VALIDATOR])]);
