@@ -1,0 +1,12 @@
+**/node_modules
+**/.next
+.git
+target
+programs
+.anchor
+.brand-preview
+**/*.keypair.json
+**/id.json
+wallets
+.env
+.env.*
