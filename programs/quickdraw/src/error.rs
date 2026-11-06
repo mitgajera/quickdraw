@@ -8,4 +8,36 @@ pub enum QuickdrawError {
     WrongOracle,
     #[msg("Oracle price is too old")]
     StaleOracle,
+    #[msg("Invalid market or book parameters")]
+    InvalidParams,
+    #[msg("Signer may not act for this player")]
+    Unauthorized,
+    #[msg("Amount must be greater than zero")]
+    ZeroAmount,
+    #[msg("Not enough balance")]
+    InsufficientBalance,
+    #[msg("Not enough LP shares")]
+    InsufficientShares,
+    #[msg("Arithmetic overflow")]
+    Overflow,
+    #[msg("This column is locked or too far ahead")]
+    ColumnClosed,
+    #[msg("The box is outside the tradable multiplier range")]
+    MultiplierOutOfRange,
+    #[msg("The multiplier moved below the minimum you accepted")]
+    Slippage,
+    #[msg("This tap would win more than the per-tap limit")]
+    ProfitTooLarge,
+    #[msg("The house cannot cover this tap right now")]
+    ExposureLimit,
+    #[msg("All tap slots are in use")]
+    TooManyTaps,
+    #[msg("No open tap in this slot")]
+    NoOpenTap,
+    #[msg("This tap cannot be settled yet")]
+    SettleTooEarly,
+    #[msg("Liquidity is committed to open taps")]
+    LiquidityLocked,
+    #[msg("Faucet only tops up wallets below its limit")]
+    FaucetLimit,
 }

@@ -4,6 +4,7 @@ use ephemeral_rollups_sdk::cpi::DelegateConfig;
 use ephemeral_rollups_sdk::ephem::MagicIntentBundleBuilder;
 
 pub mod error;
+pub mod events;
 pub mod odds;
 pub mod oracle;
 pub mod state;
