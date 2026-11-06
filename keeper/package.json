@@ -6,6 +6,7 @@
   "scripts": {
     "start": "tsx src/index.ts",
     "bootstrap": "tsx src/setup.ts",
+    "e2e": "tsx src/e2e.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
