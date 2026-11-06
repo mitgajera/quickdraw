@@ -47,6 +47,17 @@ export function Game() {
   const [stake, setStake] = useState(5);
   useEffect(() => setStake(prefs.stake()), []);
 
+  const [soundOn, setSoundOn] = useState(true);
+  useEffect(() => setSoundOn(sound.enabled), []);
+  const [banner, setBanner] = useState<{ amount: string; mult: string; key: number } | null>(null);
+  useEffect(() => model.onResult((r: Result) => {
+    if (r.outcome === "win") {
+      sound.win();
+      setBanner({ amount: usd(r.payout), mult: `${(r.tap.multBps / 1e4).toFixed(1)}x`, key: Date.now() });
+      setTimeout(() => setBanner((b) => (b && Date.now() - b.key >= 2000 ? null : b)), 2200);
+    } else if (r.outcome === "lose") sound.lose();
+  }), [model]);
+
   const [latency, setLatency] = useState<number | null>(null);
   const [flash, setFlash] = useState(false);
   const [toast, setToast] = useState<{ text: string; bad: boolean } | null>(null);
@@ -93,6 +104,13 @@ export function Game() {
     }
   }, [account.stage, signer, stake, player, model, say]);
 
+  const onReject = useCallback((reason: string, side: "near" | "far") => {
+    say(reason === "locked" ? "That column is about to open — tap one further right"
+      : reason === "too-far" ? "That column is more than two minutes out"
+      : side === "near" ? "Too close to call — no payout offered on that box"
+      : "Beyond the 25x cap — pick a box closer to the price");
+  }, [say]);
+
   const connectWallet = async (name: string) => {
     try {
       prefs.setMode("wallet");
@@ -129,8 +147,13 @@ export function Game() {
           {player && (
             <div className="bal"><span className="lbl">Balance</span><b>{usd(player.balance)}</b></div>
           )}
-          <button className="iconbtn" aria-label="Toggle theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
-            {theme === "dark" ? "☾" : "☀"}
+          <button className="iconbtn" aria-label={soundOn ? "Mute sounds" : "Unmute sounds"} aria-pressed={soundOn}
+            onClick={() => { sound.enabled = !soundOn; setSoundOn(!soundOn); }}>
+            <SoundIcon on={soundOn} />
+          </button>
+          <button className="iconbtn" aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+            <ThemeIcon dark={theme === "dark"} />
           </button>
           <WalletButton signer={signer} onDisconnect={disconnect} />
         </div>
@@ -149,7 +172,12 @@ export function Game() {
 
       <div className="body">
         <div className="boardwrap">
-          <Board model={model} stake={stake} canTap={account.stage === "ready"} onTap={onTap} />
+          <Board model={model} stake={stake} canTap={account.stage === "ready"} onTap={onTap} onReject={onReject} />
+          {banner && (
+            <div className="winbanner" key={banner.key} role="status">
+              <span className="lbl">Hit</span><b>+{banner.amount}</b><span className="mono">{banner.mult}</span>
+            </div>
+          )}
           {account.stage !== "ready" && (
             <Onboarding
               stage={account.stage} busy={account.busy} error={account.error} wallets={detected.map((w) => w.adapter.name)}
@@ -158,6 +186,7 @@ export function Game() {
           )}
         </div>
         <aside className="side">
+          {player && <Positions model={model} />}
           <div className="card">
             <div className="card-h"><span>Live taps</span><span>{model.online} trading</span></div>
             {model.feed.length === 0 ? <p className="empty">Waiting for the first tap…</p> : (
@@ -282,5 +311,58 @@ function Onboarding(props: {
         {error && <p className="err">{error}</p>}
       </div>
     </div>
+  );
+}
+
+function Positions({ model }: { model: LiveModel }) {
+  const now = Date.now() / 1000 - model.clockOffset;
+  const open = (model.player?.taps ?? []).filter((t) => t.open && t.market.equals(model.keys.market)).sort((a, b) => a.end - b.end);
+  const recent = [...model.results].reverse().slice(0, 4);
+  return (
+    <div className="card">
+      <div className="card-h"><span>Your taps</span><span>{open.length} open</span></div>
+      {open.length === 0 && recent.length === 0 ? <p className="empty">Tap a box on the grid to place one.</p> : (
+        <ul className="list">
+          {open.map((t) => {
+            const live = now >= t.start;
+            const secs = Math.max(0, Math.ceil((live ? t.end : t.start) - now));
+            return (
+              <li key={`o${t.id}`}>
+                <span className="who">{(t.multBps / 1e4).toFixed(1)}x · {usd(t.stake)}</span>
+                <span className="mono" style={{ color: live ? "var(--accent)" : undefined }}>{live ? `live ${secs}s` : `in ${secs}s`}</span>
+              </li>
+            );
+          })}
+          {recent.map((r) => (
+            <li key={`r${r.tap.id}-${r.at}`}>
+              <span className="who">{(r.tap.multBps / 1e4).toFixed(1)}x · {usd(r.tap.stake)}</span>
+              <span className={`mono ${r.outcome === "win" ? "win" : r.outcome === "lose" ? "loss" : ""}`}>
+                {r.outcome === "win" ? `+${usd(r.payout)}` : r.outcome === "lose" ? `−${usd(r.tap.stake)}` : "refunded"}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function SoundIcon({ on }: { on: boolean }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+      <path d="M2 6h3l4-3v10l-4-3H2z" fill="currentColor" stroke="none" />
+      {on ? <path d="M11.5 5.5a3.5 3.5 0 0 1 0 5M13 3.5a6 6 0 0 1 0 9" /> : <path d="M11 6l4 4M15 6l-4 4" />}
+    </svg>
+  );
+}
+
+function ThemeIcon({ dark }: { dark: boolean }) {
+  return dark ? (
+    <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d="M13.5 10.2A6 6 0 0 1 5.8 2.5a6 6 0 1 0 7.7 7.7z" fill="currentColor" /></svg>
+  ) : (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+      <circle cx="8" cy="8" r="3" fill="currentColor" />
+      <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M3 13l1.4-1.4M11.6 4.4L13 3" />
+    </svg>
   );
 }

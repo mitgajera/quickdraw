@@ -57,7 +57,11 @@ a { color: inherit; }
 }
 .btn.primary { background: var(--accent); color: var(--bg); border-color: var(--accent); }
 .btn.ink { background: var(--ink); color: var(--bg); border-color: var(--ink); }
-.iconbtn { padding: 8px; border: 1px solid var(--line); border-radius: var(--radius); font-size: 13px; line-height: 1; }
+.iconbtn {
+  display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--line);
+  border-radius: var(--radius); color: var(--mute);
+}
+.iconbtn:hover { color: var(--ink); }
 
 .hero { display: flex; align-items: flex-end; gap: 18px; padding: 6px 0 14px; }
 .pair { display: flex; gap: 8px; align-items: center; font-family: var(--font-mono), monospace; font-size: 12px; color: var(--mute); }
@@ -74,7 +78,25 @@ a { color: inherit; }
   position: relative; border: 1px solid var(--line); border-radius: var(--card-radius);
   overflow: hidden; background: var(--board);
 }
-.boardwrap canvas { display: block; width: 100%; height: 560px; touch-action: none; cursor: crosshair; }
+.boardwrap canvas {
+  display: block; width: 100%; height: clamp(460px, calc(100vh - 290px), 760px);
+  touch-action: none; cursor: crosshair;
+}
+.winbanner {
+  position: absolute; left: 50%; top: 34px; transform: translateX(-50%); pointer-events: none;
+  display: flex; align-items: baseline; gap: 12px; padding: 10px 18px; border-radius: var(--card-radius);
+  background: var(--win); color: var(--bg); animation: pop 2.2s ease-out forwards;
+}
+.winbanner b { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.winbanner .lbl { color: var(--bg); opacity: 0.75; }
+.winbanner .mono { font-weight: 600; }
+@keyframes pop {
+  0% { opacity: 0; transform: translate(-50%, 8px) scale(0.92); }
+  12% { opacity: 1; transform: translate(-50%, 0) scale(1.04); }
+  20% { transform: translate(-50%, 0) scale(1); }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -6px); }
+}
 .overlay {
   position: absolute; inset: 0; display: grid; place-items: center; padding: 24px;
   background: color-mix(in srgb, var(--board) 45%, transparent);
@@ -143,5 +165,5 @@ a { color: inherit; }
 }
 @media (prefers-reduced-motion: reduce) {
   .pulse { animation: none; }
-  .list li, .toast { animation: none; }
+  .list li, .toast, .winbanner { animation: none; }
 }
