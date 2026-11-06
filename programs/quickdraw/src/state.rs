@@ -3,14 +3,114 @@ use anchor_lang::prelude::*;
 /// Seconds of per-second high/low history kept on-chain. Taps settle within this window.
 pub const CANDLE_SLOTS: usize = 256;
 
+/// Open taps a player can hold at once.
+pub const MAX_TAPS: usize = 12;
+
 /// One tradable asset (SOL/USD, BTC/USD, ...), keyed by its oracle price account.
+/// The grid is fixed per market: rows are `band`-wide price bands, columns are `col_secs` long.
 #[account]
 #[derive(InitSpace)]
 pub struct Market {
     pub authority: Pubkey,
     pub oracle: Pubkey,
     pub candles: Pubkey,
+    /// Ticker shown in the app, e.g. `SOL`, zero padded.
+    pub symbol: [u8; 8],
+    /// Height of one row, in oracle price units (1e-8 USD).
+    pub band: u64,
+    /// Length of one column in seconds.
+    pub col_secs: u32,
+    /// Lowest per-second volatility used for odds, in price units per sqrt(second).
+    pub sigma_floor: u64,
     pub bump: u8,
+}
+
+/// The house: one shared liquidity pool that takes the other side of every tap.
+/// Lives on the ER so taps and settlements touch it in milliseconds.
+#[account]
+#[derive(InitSpace)]
+pub struct Book {
+    pub authority: Pubkey,
+    /// Test-USD mint players deposit (6 decimals).
+    pub mint: Pubkey,
+    /// Pool value in mint units, including stakes of open taps.
+    pub liquidity: u64,
+    pub total_shares: u64,
+    /// Sum of the payouts the pool owes if every open tap wins.
+    pub exposure: u64,
+    /// House edge taken from the fair multiplier, in basis points.
+    pub edge_bps: u16,
+    pub min_mult_bps: u32,
+    pub max_mult_bps: u32,
+    /// Most of the pool that open payouts may claim, in basis points.
+    pub max_exposure_bps: u16,
+    /// Largest profit a single tap may win, in mint units.
+    pub max_profit: u64,
+    pub volume: u64,
+    pub taps: u64,
+    pub bump: u8,
+}
+
+/// One open position: a stake on the price touching `[lo, hi]` during `[start, end)`.
+#[derive(
+    AnchorSerialize, AnchorDeserialize, Clone, Copy, Default, InitSpace, PartialEq, Eq, Debug,
+)]
+pub struct TapSlot {
+    pub market: Pubkey,
+    pub lo: i64,
+    pub hi: i64,
+    pub start: i64,
+    pub end: i64,
+    pub stake: u64,
+    pub mult_bps: u32,
+    /// Monotonic per-player id so the app can match settlements to taps.
+    pub id: u32,
+    pub open: bool,
+}
+
+impl TapSlot {
+    pub fn payout(&self) -> u64 {
+        (self.stake as u128 * self.mult_bps as u128 / crate::odds::ONE_X_BPS as u128) as u64
+    }
+}
+
+/// A player's in-game wallet, LP position, session key and open taps. Delegated to the ER while
+/// playing; deposits and withdrawals happen on the base layer.
+#[account]
+#[derive(InitSpace)]
+pub struct Player {
+    pub owner: Pubkey,
+    /// Browser-held key allowed to tap without wallet popups until `session_expires`.
+    pub session: Pubkey,
+    pub session_expires: i64,
+    /// Free balance in mint units.
+    pub balance: u64,
+    /// LP shares of the book.
+    pub shares: u64,
+    pub next_id: u32,
+    pub taps_placed: u32,
+    pub wins: u32,
+    pub streak: u16,
+    pub best_streak: u16,
+    /// Realised profit and loss from taps, in mint units.
+    pub pnl: i64,
+    pub taps: [TapSlot; MAX_TAPS],
+    pub bump: u8,
+}
+
+impl Player {
+    /// The owner can always act; the session key only until it expires.
+    pub fn can_tap(&self, signer: &Pubkey, now: i64) -> bool {
+        *signer == self.owner || (*signer == self.session && now < self.session_expires)
+    }
+
+    pub fn free_slot(&self) -> Option<usize> {
+        self.taps.iter().position(|t| !t.open)
+    }
+
+    pub fn open_taps(&self) -> usize {
+        self.taps.iter().filter(|t| t.open).count()
+    }
 }
 
 /// Ring buffer of per-second price ranges, written on the ER by `record_tick`.
