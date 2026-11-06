@@ -12,9 +12,9 @@ export async function erBlockhash(): Promise<string> {
   return cachedHash.value;
 }
 
-/** Anything that can sign for the player's wallet: a browser wallet or a local guest key. */
+/** The connected browser wallet (Phantom or any Wallet Standard wallet). */
 export interface AppSigner {
-  kind: "wallet" | "guest";
+  kind: "wallet";
   publicKey: PublicKey;
   signTransaction: (tx: Transaction) => Promise<Transaction>;
 }
@@ -32,19 +32,6 @@ function loadKey(key: string): Keypair | null {
 }
 const saveKey = (key: string, kp: Keypair) => store.set(key, JSON.stringify([...kp.secretKey]));
 
-/** Devnet-only guest wallet kept in this browser, so anyone can play without installing a wallet. */
-export function guestSigner(create: boolean): AppSigner | null {
-  let kp = loadKey("qd-guest");
-  if (!kp && create) { kp = Keypair.generate(); saveKey("qd-guest", kp); }
-  if (!kp) return null;
-  const key = kp;
-  return {
-    kind: "guest", publicKey: key.publicKey,
-    signTransaction: async (tx) => { tx.partialSign(key); return tx; },
-  };
-}
-export const forgetGuest = () => store.del("qd-guest");
-
 /** The session key that taps for `owner` without wallet popups. */
 export function sessionKey(owner: PublicKey, create: boolean): Keypair | null {
   const k = `qd-session-${owner.toBase58()}`;
@@ -56,8 +43,6 @@ export function sessionKey(owner: PublicKey, create: boolean): Keypair | null {
 export const prefs = {
   theme: () => (store.get("qd-theme") === "light" ? "light" : "dark") as "light" | "dark",
   setTheme: (t: "light" | "dark") => store.set("qd-theme", t),
-  stake: () => Number(store.get("qd-stake") ?? 5),
+  stake: () => Number(store.get("qd-stake") ?? 1),
   setStake: (s: number) => store.set("qd-stake", String(s)),
-  usedGuest: () => store.get("qd-mode") === "guest",
-  setMode: (m: "guest" | "wallet") => store.set("qd-mode", m),
 };

@@ -4,15 +4,15 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletReadyState } from "@solana/wallet-adapter-base";
 import { ComputeBudgetProgram, Transaction } from "@solana/web3.js";
-import { USD, explainError, ix, rowHeight, sendSigned, type Symbol } from "@quickdraw/sdk";
+import { explainError, ix, rowHeight, sendSigned, type Symbol } from "@quickdraw/sdk";
 import { Board } from "./Board";
 import { useAccount, type Stage } from "@/lib/account";
-import { erBlockhash, er, forgetGuest, guestSigner, prefs, sessionKey, type AppSigner } from "@/lib/chain";
+import { erBlockhash, er, prefs, sessionKey, type AppSigner } from "@/lib/chain";
 import { LiveModel, type Result } from "@/lib/live";
 import { sound } from "@/lib/sound";
 
 const SYMBOLS: Symbol[] = ["SOL", "BTC", "ETH"];
-const STAKES = [1, 5, 10, 25];
+const STAKES = [0.5, 1, 2, 5];
 const TAP_COMPUTE_UNITS = 400_000;
 const DECIMALS: Record<Symbol, number> = { SOL: 4, BTC: 1, ETH: 2 };
 const usd = (v: bigint | number) => {
@@ -23,15 +23,12 @@ const short = (s: string) => `${s.slice(0, 4)}…${s.slice(-3)}`;
 
 export function Game() {
   const wallet = useWallet();
-  const [guest, setGuest] = useState<AppSigner | null>(null);
-  useEffect(() => { if (prefs.usedGuest()) setGuest(guestSigner(false)); }, []);
-
   const signer = useMemo<AppSigner | null>(() => {
     if (wallet.publicKey && wallet.signTransaction) {
       return { kind: "wallet", publicKey: wallet.publicKey, signTransaction: wallet.signTransaction };
     }
-    return guest;
-  }, [wallet.publicKey, wallet.signTransaction, guest]);
+    return null;
+  }, [wallet.publicKey, wallet.signTransaction]);
 
   const [symbol, setSymbol] = useState<Symbol>("SOL");
   const model = useMemo(() => new LiveModel(symbol), [symbol]);
@@ -80,7 +77,7 @@ export function Game() {
     if (account.stage !== "ready" || !signer) return;
     const session = sessionKey(signer.publicKey, false);
     if (!session) return;
-    const amount = BigInt(stake) * USD;
+    const amount = BigInt(Math.round(stake * 1e6));
     if (!player || player.balance < amount) { say("Not enough balance for that stake", true); return; }
     sound.tap();
     const key = `${column}:${bandIndex}:${Date.now()}`;
@@ -116,20 +113,16 @@ export function Game() {
 
   const connectWallet = async (name: string) => {
     try {
-      prefs.setMode("wallet");
       wallet.select(name as Parameters<typeof wallet.select>[0]);
-      setGuest(null);
     } catch (e) { say(explainError(e), true); }
   };
   useEffect(() => {
     if (wallet.wallet && !wallet.connected && !wallet.connecting) wallet.connect().catch(() => {});
   }, [wallet]);
 
-  const playAsGuest = () => { prefs.setMode("guest"); setGuest(guestSigner(true)); };
-  const disconnect = async () => {
-    if (signer?.kind === "wallet") await wallet.disconnect();
-    else { setGuest(null); prefs.setMode("wallet"); }
-  };
+  const disconnect = async () => { await wallet.disconnect(); };
+  // account errors outside the onboarding card (cash out, add funds) surface as toasts
+  useEffect(() => { if (account.error && account.stage === "ready") say(account.error, true); }, [account.error, account.stage, say]);
 
   const detected = wallet.wallets.filter((w) => w.readyState === WalletReadyState.Installed || w.readyState === WalletReadyState.Loadable);
 
@@ -158,7 +151,10 @@ export function Game() {
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
             <ThemeIcon dark={theme === "dark"} />
           </button>
-          <WalletButton signer={signer} onDisconnect={disconnect} />
+          <WalletButton
+            signer={signer} busy={account.busy} walletUsdc={account.walletUsdc} canManage={account.stage === "ready"}
+            onDisconnect={disconnect} onCashOut={account.cashOut} onAddFunds={account.addFunds}
+          />
         </div>
       </header>
 
@@ -184,7 +180,7 @@ export function Game() {
           {account.stage !== "ready" && (
             <Onboarding
               stage={account.stage} busy={account.busy} error={account.error} wallets={detected.map((w) => w.adapter.name)}
-              onWallet={connectWallet} onGuest={playAsGuest} onActivate={account.activate}
+              walletUsdc={account.walletUsdc} onWallet={connectWallet} onActivate={account.activate} onRecheck={account.recheck}
             />
           )}
         </div>
@@ -230,7 +226,7 @@ export function Game() {
       <footer className="dock">
         <div className="stakes"><span className="lbl">Stake</span>
           {STAKES.map((s) => (
-            <button key={s} className="chip" aria-pressed={s === stake} onClick={() => { setStake(s); prefs.setStake(s); }}>${s}</button>
+            <button key={s} className="chip" aria-pressed={s === stake} onClick={() => { setStake(s); prefs.setStake(s); }}>${s < 1 ? s.toFixed(2) : s}</button>
           ))}
         </div>
         <div className="stats">
@@ -251,22 +247,26 @@ export function Game() {
   );
 }
 
-function WalletButton({ signer, onDisconnect }: { signer: AppSigner | null; onDisconnect: () => void }) {
+function WalletButton(props: {
+  signer: AppSigner | null; busy: string | null; walletUsdc: bigint; canManage: boolean;
+  onDisconnect: () => void; onCashOut: () => void; onAddFunds: () => void;
+}) {
+  const { signer, busy, walletUsdc, canManage } = props;
   const [open, setOpen] = useState(false);
   if (!signer) return null;
+  const act = (fn: () => void) => () => { setOpen(false); fn(); };
   return (
     <div style={{ position: "relative" }}>
-      <button className="btn" onClick={() => setOpen(!open)}>
-        <span className="mono nowrap">{signer.kind === "guest" && <span className="hide-sm">guest </span>}{short(signer.publicKey.toBase58())}</span>
+      <button className="btn" onClick={() => setOpen(!open)} disabled={!!busy && canManage}>
+        <span className="mono nowrap">{busy && canManage ? busy : short(signer.publicKey.toBase58())}</span>
       </button>
       {open && (
-        <div className="card" style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 10, minWidth: 180 }}>
-          <button className="btn" style={{ width: "100%" }} onClick={() => { setOpen(false); onDisconnect(); }}>Disconnect</button>
-          {signer.kind === "guest" && (
-            <button className="btn" style={{ width: "100%", marginTop: 6 }} onClick={() => { forgetGuest(); setOpen(false); onDisconnect(); }}>
-              Forget guest wallet
-            </button>
-          )}
+        <div className="card menu">
+          <p className="lbl">In wallet: {usd(walletUsdc)} USDC</p>
+          {canManage && <button className="btn" onClick={act(props.onAddFunds)} disabled={walletUsdc === 0n}>Add wallet USDC</button>}
+          {canManage && <button className="btn" onClick={act(props.onCashOut)}>Cash out to wallet</button>}
+          <a className="btn" href="https://faucet.circle.com/" target="_blank" rel="noreferrer">Get devnet USDC ↗</a>
+          <button className="btn" onClick={act(props.onDisconnect)}>Disconnect</button>
         </div>
       )}
     </div>
@@ -274,40 +274,54 @@ function WalletButton({ signer, onDisconnect }: { signer: AppSigner | null; onDi
 }
 
 const STEPS: { stage: Stage[]; text: string }[] = [
-  { stage: ["new"], text: "Mint $1,000 test USD (devnet)" },
+  { stage: ["new", "undelegated"], text: "Deposit your devnet USDC into the game" },
   { stage: ["new", "undelegated"], text: "Open your account on the MagicBlock rollup" },
   { stage: ["new", "undelegated", "session"], text: "Authorise this browser to tap without popups for 24h" },
 ];
 
 function Onboarding(props: {
-  stage: Stage; busy: string | null; error: string | null; wallets: string[];
-  onWallet: (name: string) => void; onGuest: () => void; onActivate: () => void;
+  stage: Stage; busy: string | null; error: string | null; wallets: string[]; walletUsdc: bigint;
+  onWallet: (name: string) => void; onActivate: () => void; onRecheck: () => void;
 }) {
-  const { stage, busy, error, wallets } = props;
+  const { stage, busy, error, wallets, walletUsdc } = props;
+  const needsUsdc = stage === "new" && walletUsdc === 0n;
   return (
     <div className="overlay">
       <div className="onboard">
         {stage === "disconnected" && (
           <>
             <h2>Fastest tap wins.</h2>
-            <p>Tap a box on the live chart. If the price touches it before its column closes, you win the multiplier. Odds are computed on-chain, taps land in ~50ms on a MagicBlock rollup, and every result is settled from on-chain price candles.</p>
+            <p>Tap a box on the live chart. If the price touches it before its column closes, you win the multiplier. Odds are computed on-chain, taps land in ~50ms on a MagicBlock rollup, and every result is settled from on-chain price candles. Plays with devnet USDC.</p>
             <div className="row">
               {wallets.map((w) => <button key={w} className="btn primary" onClick={() => props.onWallet(w)}>Connect {w}</button>)}
-              <button className={`btn${wallets.length ? "" : " primary"}`} onClick={props.onGuest}>Play as guest</button>
+              {wallets.length === 0 && (
+                <a className="btn primary" href="https://phantom.com/download" target="_blank" rel="noreferrer">Install Phantom ↗</a>
+              )}
             </div>
           </>
         )}
         {stage === "checking" && <p>Checking your account…</p>}
-        {(stage === "new" || stage === "undelegated" || stage === "session") && (
+        {needsUsdc && (
+          <>
+            <h2>Get devnet USDC</h2>
+            <p>Quickdraw plays with Circle&apos;s devnet USDC. Claim 20 free at the faucet: pick <b>USDC</b> and <b>Solana Devnet</b>, paste your wallet address, then come back.</p>
+            <div className="row">
+              <a className="btn primary" href="https://faucet.circle.com/" target="_blank" rel="noreferrer">Open Circle faucet ↗</a>
+              <button className="btn" onClick={props.onRecheck}>I have USDC</button>
+            </div>
+          </>
+        )}
+        {!needsUsdc && (stage === "new" || stage === "undelegated" || stage === "session") && (
           <>
             <h2>{stage === "new" ? "One signature to start" : stage === "undelegated" ? "Resume playing" : "Authorise this browser"}</h2>
+            {stage !== "session" && <p>{walletUsdc > 0n ? `${usd(walletUsdc)} USDC in your wallet will be deposited.` : "Your game balance moves back into the rollup."}</p>}
             <ul className="steps">
               {STEPS.map((s, i) => (
                 <li key={s.text}><span className="n">0{i + 1}</span><span className={s.stage.includes(stage) ? "" : "done"}>{s.text}</span></li>
               ))}
             </ul>
             <button className="btn primary" disabled={!!busy} onClick={props.onActivate}>
-              {busy ?? (stage === "new" ? "Start playing" : stage === "undelegated" ? "Resume" : "Authorise")}
+              {busy ?? (stage === "new" ? "Deposit and play" : stage === "undelegated" ? "Resume" : "Authorise")}
             </button>
           </>
         )}
