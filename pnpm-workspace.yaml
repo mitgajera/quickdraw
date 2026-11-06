@@ -1,0 +1,4 @@
+packages:
+  - sdk
+  - keeper
+  - app

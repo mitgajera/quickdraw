@@ -1,0 +1,12 @@
+{
+  "name": "quickdraw",
+  "private": true,
+  "packageManager": "pnpm@10.22.0",
+  "scripts": {
+    "dev": "pnpm --filter @quickdraw/app dev",
+    "keeper": "pnpm --filter @quickdraw/keeper start",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test"
+  }
+}
