@@ -92,4 +92,30 @@ pub mod quickdraw {
         instructions::lp_remove_handler(ctx, shares)
     }
 
+    // --- players ---
+
+    pub fn init_player(ctx: Context<InitPlayer>) -> Result<()> {
+        instructions::init_player_handler(ctx)
+    }
+
+    pub fn deposit(ctx: Context<MoveFunds>, amount: u64) -> Result<()> {
+        instructions::deposit_handler(ctx, amount)
+    }
+
+    pub fn withdraw(ctx: Context<MoveFunds>, amount: u64) -> Result<()> {
+        instructions::withdraw_handler(ctx, amount)
+    }
+
+    pub fn set_session(ctx: Context<SetSession>, session: Pubkey, expires_at: i64) -> Result<()> {
+        instructions::set_session_handler(ctx, session, expires_at)
+    }
+
+    pub fn delegate_player(ctx: Context<DelegatePlayer>) -> Result<()> {
+        instructions::delegate_player_handler(ctx)
+    }
+
+    pub fn undelegate_player(ctx: Context<UndelegatePlayer>) -> Result<()> {
+        instructions::undelegate_player_handler(ctx)
+    }
+
 }
