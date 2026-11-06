@@ -1,6 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::associated_token::AssociatedToken;
-use anchor_spl::token::{self, Mint, MintTo, Token, TokenAccount};
+use anchor_spl::token::{Mint, Token, TokenAccount};
 use ephemeral_rollups_sdk::anchor::{commit, delegate};
 use ephemeral_rollups_sdk::cpi::DelegateConfig;
 use ephemeral_rollups_sdk::ephem::{FoldableIntentBuilder, MagicIntentBundleBuilder};
@@ -8,12 +7,7 @@ use ephemeral_rollups_sdk::ephem::{FoldableIntentBuilder, MagicIntentBundleBuild
 use crate::error::QuickdrawError;
 use crate::odds::ONE_X_BPS;
 use crate::state::Book;
-use crate::{BOOK_SEED, MINT_DECIMALS, MINT_SEED, VAULT_SEED, VAULT_TOKENS_SEED};
-
-/// Faucet mints this much test USD per call (1,000 with 6 decimals).
-pub const FAUCET_AMOUNT: u64 = 1_000 * 10u64.pow(MINT_DECIMALS as u32);
-/// Faucet refuses wallets already holding at least this much.
-pub const FAUCET_CAP: u64 = 5_000 * 10u64.pow(MINT_DECIMALS as u32);
+use crate::{BOOK_SEED, USDC_MINT, VAULT_SEED, VAULT_TOKENS_SEED};
 
 /// Risk settings of the house.
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug)]
@@ -48,7 +42,7 @@ impl BookParams {
     }
 }
 
-/// Creates the house book, the test-USD mint and the token vault (base layer, once).
+/// Creates the house book and its devnet-USDC vault (base layer, once).
 pub fn init_book_handler(ctx: Context<InitBook>, params: BookParams) -> Result<()> {
     params.validate()?;
     let book = &mut ctx.accounts.book;
@@ -64,28 +58,6 @@ pub fn update_book_handler(ctx: Context<UpdateBook>, params: BookParams) -> Resu
     params.validate()?;
     params.apply(&mut ctx.accounts.book);
     Ok(())
-}
-
-/// Mints 1,000 test USD to the caller's wallet (devnet only, base layer).
-pub fn faucet_handler(ctx: Context<Faucet>) -> Result<()> {
-    require!(
-        ctx.accounts.user_tokens.amount < FAUCET_CAP,
-        QuickdrawError::FaucetLimit
-    );
-    let bump = [ctx.bumps.vault];
-    let seeds: &[&[&[u8]]] = &[&[VAULT_SEED, &bump]];
-    token::mint_to(
-        CpiContext::new_with_signer(
-            ctx.accounts.token_program.key(),
-            MintTo {
-                mint: ctx.accounts.mint.to_account_info(),
-                to: ctx.accounts.user_tokens.to_account_info(),
-                authority: ctx.accounts.vault.to_account_info(),
-            },
-            seeds,
-        ),
-        FAUCET_AMOUNT,
-    )
 }
 
 /// Hands the book to the ER so every tap and settlement can update it.
@@ -130,17 +102,11 @@ pub struct InitBook<'info> {
     pub authority: Signer<'info>,
     #[account(init, payer = authority, space = 8 + Book::INIT_SPACE, seeds = [BOOK_SEED], bump)]
     pub book: Account<'info, Book>,
-    /// CHECK: PDA that signs for the mint and the vault; holds no data.
+    /// CHECK: PDA that owns the vault; holds no data.
     #[account(seeds = [VAULT_SEED], bump)]
     pub vault: UncheckedAccount<'info>,
-    #[account(
-        init,
-        payer = authority,
-        seeds = [MINT_SEED],
-        bump,
-        mint::decimals = MINT_DECIMALS,
-        mint::authority = vault
-    )]
+    /// Circle's devnet USDC: the only token the house takes.
+    #[account(address = USDC_MINT @ QuickdrawError::WrongMint)]
     pub mint: Account<'info, Mint>,
     #[account(
         init,
@@ -160,27 +126,6 @@ pub struct UpdateBook<'info> {
     pub authority: Signer<'info>,
     #[account(mut, seeds = [BOOK_SEED], bump = book.bump, has_one = authority @ QuickdrawError::Unauthorized)]
     pub book: Account<'info, Book>,
-}
-
-#[derive(Accounts)]
-pub struct Faucet<'info> {
-    #[account(mut)]
-    pub user: Signer<'info>,
-    /// CHECK: PDA mint authority.
-    #[account(seeds = [VAULT_SEED], bump)]
-    pub vault: UncheckedAccount<'info>,
-    #[account(mut, seeds = [MINT_SEED], bump)]
-    pub mint: Account<'info, Mint>,
-    #[account(
-        init_if_needed,
-        payer = user,
-        associated_token::mint = mint,
-        associated_token::authority = user
-    )]
-    pub user_tokens: Account<'info, TokenAccount>,
-    pub token_program: Program<'info, Token>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
-    pub system_program: Program<'info, System>,
 }
 
 #[delegate]

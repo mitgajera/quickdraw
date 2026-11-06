@@ -6,7 +6,7 @@ use ephemeral_rollups_sdk::ephem::{FoldableIntentBuilder, MagicIntentBundleBuild
 
 use crate::error::QuickdrawError;
 use crate::state::Player;
-use crate::{MINT_DECIMALS, MINT_SEED, PLAYER_SEED, VAULT_SEED, VAULT_TOKENS_SEED};
+use crate::{MINT_DECIMALS, PLAYER_SEED, USDC_MINT, VAULT_SEED, VAULT_TOKENS_SEED};
 
 /// Longest a session key may stay valid.
 pub const MAX_SESSION_SECONDS: i64 = 7 * 24 * 60 * 60;
@@ -19,7 +19,7 @@ pub fn init_player_handler(ctx: Context<InitPlayer>) -> Result<()> {
     Ok(())
 }
 
-/// Moves test USD from the wallet into the game balance (base layer, player not delegated).
+/// Moves devnet USDC from the wallet into the game balance (base layer, player not delegated).
 pub fn deposit_handler(ctx: Context<MoveFunds>, amount: u64) -> Result<()> {
     require!(amount > 0, QuickdrawError::ZeroAmount);
     token::transfer_checked(
@@ -141,7 +141,7 @@ pub struct MoveFunds<'info> {
     /// CHECK: PDA that owns the vault.
     #[account(seeds = [VAULT_SEED], bump)]
     pub vault: UncheckedAccount<'info>,
-    #[account(seeds = [MINT_SEED], bump)]
+    #[account(address = USDC_MINT @ QuickdrawError::WrongMint)]
     pub mint: Account<'info, Mint>,
     #[account(mut, token::mint = mint, token::authority = owner)]
     pub user_tokens: Account<'info, TokenAccount>,

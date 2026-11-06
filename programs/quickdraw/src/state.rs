@@ -31,7 +31,7 @@ pub struct Market {
 #[derive(InitSpace)]
 pub struct Book {
     pub authority: Pubkey,
-    /// Test-USD mint players deposit (6 decimals).
+    /// USDC mint players deposit (6 decimals).
     pub mint: Pubkey,
     /// Pool value in mint units, including stakes of open taps.
     pub liquidity: u64,

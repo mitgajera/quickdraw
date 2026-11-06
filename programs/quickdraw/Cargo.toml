@@ -20,7 +20,7 @@ custom-heap = []
 custom-panic = []
 
 [dependencies]
-anchor-lang = { version = "1.2.1", features = ["init-if-needed"] }
+anchor-lang = "1.2.1"
 anchor-spl = "1.2.1"
 bytemuck = { version = "1", features = ["derive", "min_const_generics"] }
 ephemeral-rollups-sdk = { version = "0.17.3", features = ["anchor"] }

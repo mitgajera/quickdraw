@@ -16,10 +16,10 @@ pub const MARKET_SEED: &[u8] = b"mkt";
 pub const CANDLES_SEED: &[u8] = b"candles";
 pub const BOOK_SEED: &[u8] = b"book";
 pub const PLAYER_SEED: &[u8] = b"player";
-pub const MINT_SEED: &[u8] = b"mint";
 pub const VAULT_SEED: &[u8] = b"vault";
 pub const VAULT_TOKENS_SEED: &[u8] = b"vault-tokens";
-/// Test USD has 6 decimals, like USDC.
+/// Circle's devnet USDC: the only token the house takes. 6 decimals.
+pub const USDC_MINT: Pubkey = pubkey!("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
 pub const MINT_DECIMALS: u8 = 6;
 
 /// `record_tick` rejects oracle readings older than this (seconds, against the ER clock).
@@ -78,10 +78,6 @@ pub mod quickdraw {
 
     pub fn update_book(ctx: Context<UpdateBook>, params: BookParams) -> Result<()> {
         instructions::update_book_handler(ctx, params)
-    }
-
-    pub fn faucet(ctx: Context<Faucet>) -> Result<()> {
-        instructions::faucet_handler(ctx)
     }
 
     pub fn delegate_book(ctx: Context<DelegateBook>) -> Result<()> {

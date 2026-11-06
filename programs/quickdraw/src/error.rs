@@ -38,6 +38,6 @@ pub enum QuickdrawError {
     SettleTooEarly,
     #[msg("Liquidity is committed to open taps")]
     LiquidityLocked,
-    #[msg("Faucet only tops up wallets below its limit")]
-    FaucetLimit,
+    #[msg("Only devnet USDC is accepted")]
+    WrongMint,
 }
