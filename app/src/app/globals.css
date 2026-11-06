@@ -21,6 +21,7 @@ body {
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: 0.5; }
 a { color: inherit; }
+.nowrap { white-space: nowrap; }
 .mono { font-family: var(--font-mono), ui-monospace, monospace; font-variant-numeric: tabular-nums; }
 .lbl {
   font-family: var(--font-mono), monospace; font-size: 11px; letter-spacing: 0.06em;
@@ -152,11 +153,21 @@ a { color: inherit; }
 @media (max-width: 900px) {
   .body { grid-template-columns: 1fr; }
   .hint, .mkts { display: none; }
-  .boardwrap canvas { height: 62vh; }
+  .boardwrap canvas { height: 62vh; min-height: 380px; }
   .px { font-size: 36px; }
 }
 @media (max-width: 600px) {
+  .app { padding-bottom: 150px; }
+  .hide-sm { display: none; }
+  .top .btn { padding: 8px 10px; }
   .top { gap: 8px; flex-wrap: wrap; }
+  .word { font-size: 15px; }
+  .bal b { font-size: 13px; }
+  .hero { padding-bottom: 10px; }
+  .dock {
+    position: fixed; left: 8px; right: 8px; bottom: 8px; z-index: 15; margin: 0; gap: 10px;
+    box-shadow: 0 10px 40px rgba(0,0,0,.35);
+  }
   .right { gap: 8px; }
   .badge { padding: 6px 8px; font-size: 11px; }
   .stakes { width: 100%; }

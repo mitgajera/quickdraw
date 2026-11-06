@@ -142,7 +142,7 @@ export function Game() {
         <div className="right">
           <div className={`badge${flash ? " flash" : ""}`} title="Time from tap to confirmation on the MagicBlock rollup">
             <span className={`pulse${model.erOk ? "" : " off"}`} />
-            <span>{latency === null ? "ER · live" : `tap → ER · ${latency}ms`}</span>
+            <span>{latency === null ? "ER · live" : <><span className="hide-sm">tap → ER · </span>{latency}ms</>}</span>
           </div>
           {player && (
             <div className="bal"><span className="lbl">Balance</span><b>{usd(player.balance)}</b></div>
@@ -254,7 +254,7 @@ function WalletButton({ signer, onDisconnect }: { signer: AppSigner | null; onDi
   return (
     <div style={{ position: "relative" }}>
       <button className="btn" onClick={() => setOpen(!open)}>
-        <span className="mono">{signer.kind === "guest" ? "guest " : ""}{short(signer.publicKey.toBase58())}</span>
+        <span className="mono nowrap">{signer.kind === "guest" && <span className="hide-sm">guest </span>}{short(signer.publicKey.toBase58())}</span>
       </button>
       {open && (
         <div className="card" style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 10, minWidth: 180 }}>
