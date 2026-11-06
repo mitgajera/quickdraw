@@ -146,13 +146,16 @@ export class LiveModel {
   private async slow() {
     if (this.stopped) return;
     try {
-      const [candles, book] = await er.getMultipleAccountsInfo([this.keys.candles, bookPda()]);
+      // re-read the market every second too: its grid can be retuned on-chain at any time, and a
+      // stale row height would quote boxes the program then rejects
+      const [candles, book, market] = await er.getMultipleAccountsInfo([this.keys.candles, bookPda(), this.keys.market]);
       if (candles) {
         this.candles = decodeCandles(candles.data);
         if (this.hist.length < 3) this.backfill(this.candles);
       }
       if (book) this.book = decodeBook(book.data);
-      if (!this.market) await this.loadMarket();
+      if (market) this.market = decodeMarket(market.data);
+      else if (!this.market) await this.loadMarket();
     } catch { /* next round */ }
   }
 
