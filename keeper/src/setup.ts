@@ -19,10 +19,11 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * and floors sit near the calm-market volatility.
  */
 const GRIDS: Record<Symbol, { band: bigint; sigmaFloor: bigint }> = {
-  // rows ~1.4x each market's realised per-second volatility, so every market moves and spreads alike
-  SOL: { band: 750_000n, sigmaFloor: 150_000n },          // $0.0075 rows, $0.0015/sqrt(s)
-  BTC: { band: 500_000_000n, sigmaFloor: 40_000_000n },   // $5 rows, $0.40/sqrt(s)
-  ETH: { band: 15_000_000n, sigmaFloor: 1_200_000n },     // $0.15 rows, $0.012/sqrt(s)
+  // base rows ~0.7x each market's realised per-second volatility; the app zooms out (up to 16x)
+  // when a market is busy, so calm markets still move and busy ones keep a gradient of odds
+  SOL: { band: 375_000n, sigmaFloor: 150_000n },          // $0.00375 base rows, $0.0015/sqrt(s)
+  BTC: { band: 250_000_000n, sigmaFloor: 40_000_000n },   // $2.50 base rows, $0.40/sqrt(s)
+  ETH: { band: 7_500_000n, sigmaFloor: 1_200_000n },      // $0.075 base rows, $0.012/sqrt(s)
 };
 const COL_SECS = 4;
 const SEED_LIQUIDITY = 500n * USD;
