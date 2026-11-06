@@ -27,12 +27,14 @@ interface Props {
   stake: number;
   canTap: boolean;
   onTap: (bandIndex: bigint, column: number, multBps: number) => void;
+  /** Tapped a box the house does not offer right now. */
+  onReject?: (reason: "locked" | "too-far" | "unpriced" | "range", side: "near" | "far") => void;
 }
 
-export function Board({ model, stake, canTap, onTap }: Props) {
+export function Board({ model, stake, canTap, onTap, onReject }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
-  const props = useRef({ stake, canTap, onTap });
-  props.current = { stake, canTap, onTap };
+  const props = useRef({ stake, canTap, onTap, onReject });
+  props.current = { stake, canTap, onTap, onReject };
 
   useEffect(() => {
     const cvs = canvas.current!;
@@ -88,7 +90,12 @@ export function Board({ model, stake, canTap, onTap }: Props) {
       const r = cvs.getBoundingClientRect(), c = cellAt(e.clientX - r.left, e.clientY - r.top);
       if (!c || !props.current.canTap) return;
       const q = quoteAt(c.k, c.j);
-      if (!q?.ok) return;
+      if (!q) return;
+      if (!q.ok) {
+        const priceBand = model.price !== null && model.market ? Number(model.price / model.market.band) : c.j;
+        props.current.onReject?.(q.reason, Math.abs(c.j - priceBand) <= 2 ? "near" : "far");
+        return;
+      }
       ripples.push({ k: c.k, j: c.j, age: 0 });
       props.current.onTap(BigInt(c.j), c.k, q.multBps);
     };
