@@ -1,4 +1,7 @@
 use anchor_lang::prelude::*;
+use ephemeral_rollups_sdk::anchor::{commit, delegate, ephemeral};
+use ephemeral_rollups_sdk::cpi::DelegateConfig;
+use ephemeral_rollups_sdk::ephem::MagicIntentBundleBuilder;
 
 pub mod error;
 pub mod oracle;
@@ -15,6 +18,7 @@ pub const CANDLES_SEED: &[u8] = b"candles";
 /// Reject oracle readings older than this (seconds, compared with the ER clock).
 pub const MAX_ORACLE_AGE_SECONDS: i64 = 30;
 
+#[ephemeral]
 #[program]
 pub mod quickdraw {
     use super::*;
@@ -30,6 +34,21 @@ pub mod quickdraw {
         Ok(())
     }
 
+    /// Hands the candle ring to the ephemeral rollup so ticks are written in milliseconds.
+    pub fn delegate_candles(ctx: Context<DelegateCandles>) -> Result<()> {
+        let validator = ctx.remaining_accounts.first().map(|account| account.key());
+        let market_key = ctx.accounts.market.key();
+        ctx.accounts.delegate_candles(
+            &ctx.accounts.payer,
+            &[CANDLES_SEED, market_key.as_ref()],
+            DelegateConfig {
+                validator,
+                ..Default::default()
+            },
+        )?;
+        Ok(())
+    }
+
     /// Records the oracle's latest price into the current second's high/low (ER, permissionless).
     pub fn record_tick(ctx: Context<RecordTick>) -> Result<()> {
         let reading = read_oracle_price(&ctx.accounts.oracle)?;
@@ -42,6 +61,18 @@ pub mod quickdraw {
             .candles
             .load_mut()?
             .record(reading.price, reading.publish_time);
+        Ok(())
+    }
+
+    /// Commits the candle ring back to Solana and returns it to the base layer.
+    pub fn undelegate_candles(ctx: Context<UndelegateCandles>) -> Result<()> {
+        MagicIntentBundleBuilder::new(
+            ctx.accounts.payer.to_account_info(),
+            ctx.accounts.magic_context.to_account_info(),
+            ctx.accounts.magic_program.to_account_info(),
+        )
+        .commit_and_undelegate(&[ctx.accounts.candles.to_account_info()])
+        .build_and_invoke()?;
         Ok(())
     }
 }
@@ -73,6 +104,18 @@ pub struct InitMarket<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[delegate]
+#[derive(Accounts)]
+pub struct DelegateCandles<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    #[account(seeds = [MARKET_SEED, market.oracle.as_ref()], bump = market.bump)]
+    pub market: Account<'info, Market>,
+    /// CHECK: the market's candle ring, delegated to the ER.
+    #[account(mut, del, seeds = [CANDLES_SEED, market.key().as_ref()], bump)]
+    pub candles: UncheckedAccount<'info>,
+}
+
 #[derive(Accounts)]
 pub struct RecordTick<'info> {
     #[account(seeds = [MARKET_SEED, market.oracle.as_ref()], bump = market.bump)]
@@ -82,4 +125,15 @@ pub struct RecordTick<'info> {
     /// CHECK: must be this market's oracle feed; parsed and verified in the handler.
     #[account(address = market.oracle @ QuickdrawError::WrongOracle)]
     pub oracle: UncheckedAccount<'info>,
+}
+
+#[commit]
+#[derive(Accounts)]
+pub struct UndelegateCandles<'info> {
+    #[account(mut)]
+    pub payer: Signer<'info>,
+    #[account(seeds = [MARKET_SEED, market.oracle.as_ref()], bump = market.bump)]
+    pub market: Account<'info, Market>,
+    #[account(mut, address = market.candles)]
+    pub candles: AccountLoader<'info, Candles>,
 }
