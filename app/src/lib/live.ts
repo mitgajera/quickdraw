@@ -37,7 +37,7 @@ export class LiveModel {
   online = 0;
   erOk = true;
   version = 0;
-  onResult?: (r: Result) => void;
+  private resultListeners = new Set<(r: Result) => void>();
 
   private owner: PublicKey | null = null;
   private timers: ReturnType<typeof setInterval>[] = [];
@@ -47,6 +47,9 @@ export class LiveModel {
   private stopped = false;
 
   constructor(symbol: Symbol) { this.keys = marketKeys(symbol); }
+
+  /** Called once per own tap the keeper settles. */
+  onResult(fn: (r: Result) => void) { this.resultListeners.add(fn); return () => { this.resultListeners.delete(fn); }; }
 
   subscribe(fn: () => void) { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; }
   private bump() { this.version++; this.listeners.forEach((f) => f()); }
@@ -127,7 +130,7 @@ export class LiveModel {
         id: `r${t.id}-${result.at}`, who: "you", me: true, tone: result.outcome === "win" ? "win" : result.outcome === "lose" ? "loss" : "",
         text: result.outcome === "win" ? `won ${usd(result.payout)}` : result.outcome === "lose" ? `lost ${usd(t.stake)}` : `refunded ${usd(t.stake)}`,
       });
-      this.onResult?.(result);
+      this.resultListeners.forEach((f) => f(result));
     }
     // drop pending taps the chain now shows
     this.pending = this.pending.filter((p) => !next.taps.some((t) => t.open && t.start === p.column * (this.market?.colSecs ?? 4)

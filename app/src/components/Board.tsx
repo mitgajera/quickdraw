@@ -66,7 +66,7 @@ export function Board({ model, stake, canTap, onTap }: Props) {
       return quoteBox(book, boxAt(market, BigInt(j), k), price, publishTime, sigmaFor(market, candles, publishTime));
     };
 
-    model.onResult = (r: Result) => {
+    const offResult = model.onResult((r: Result) => {
       if (r.outcome !== "win") return;
       const k = r.tap.start / L.col, j = Number(r.tap.lo / BigInt(Math.round(L.band * 1e8)));
       const x = xOf(k * L.col) + L.colPx / 2, y = yOf((j + 1) * L.band) + L.rowPx / 2;
@@ -77,7 +77,7 @@ export function Board({ model, stake, canTap, onTap }: Props) {
         const a = Math.random() * Math.PI * 2, v = 80 + Math.random() * 220;
         parts.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 90, life: 1 + Math.random() * 0.4, r: Math.random() * 6, vr: (Math.random() - 0.5) * 12, c: i % 2 ? T.accent : T.win });
       }
-    };
+    });
 
     const onMove = (e: PointerEvent) => { const r = cvs.getBoundingClientRect(); hover = cellAt(e.clientX - r.left, e.clientY - r.top); };
     const onLeave = () => { hover = null; };
@@ -314,7 +314,7 @@ export function Board({ model, stake, canTap, onTap }: Props) {
       cancelAnimationFrame(raf); ro.disconnect(); clearInterval(themeTimer); clearInterval(fontTimer);
       cvs.removeEventListener("pointermove", onMove); cvs.removeEventListener("pointerleave", onLeave);
       cvs.removeEventListener("pointerdown", onDown);
-      model.onResult = undefined;
+      offResult();
     };
   }, [model]);
 
