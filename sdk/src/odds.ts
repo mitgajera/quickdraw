@@ -1,7 +1,7 @@
 // Mirror of the on-chain odds (window touch pricing) (programs/quickdraw/src/odds.rs, state.rs, instructions/tap.rs), so
 // the grid shows the multiplier the program will actually give.
 import type { Book, Candles, Market } from "./accounts";
-import { CANDLE_SLOTS, MAX_AHEAD_SECS, MIN_VOL_SAMPLES, ONE_X_BPS, TAP_LOCK_SECS, VOL_WINDOW_SECS, DRIFT_VOL_SCALE, WINDOW_VOL_SCALE } from "./constants";
+import { CANDLE_SLOTS, MAX_AHEAD_SECS, MIN_VOL_SAMPLES, ONE_X_BPS, TAP_LOCK_SECS, VOL_WINDOW_SECS, DRIFT_VOL_SCALE, WINDOW_VOL_SCALE, MAX_ZOOM } from "./constants";
 
 /** Complementary error function (Numerical Recipes `erfcc`), same constants as the program. */
 function erfc(x: number): number {
@@ -100,12 +100,39 @@ export function sigmaFor(market: Market, candles: Candles | null, now: number): 
   return Math.max(est, Number(market.sigmaFloor));
 }
 
-export interface Box { bandIndex: bigint; column: number; lo: bigint; hi: bigint; start: number; end: number }
+export interface Box { bandIndex: bigint; column: number; zoom: number; lo: bigint; hi: bigint; start: number; end: number }
 
-export function boxAt(market: Market, bandIndex: bigint, column: number): Box {
-  const lo = bandIndex * market.band;
+/** Row height at a zoom level: the market's base row doubled `zoom` times. */
+export const rowHeight = (market: Market, zoom = 0) => market.band << BigInt(zoom);
+
+export function boxAt(market: Market, bandIndex: bigint, column: number, zoom = 0): Box {
+  const h = rowHeight(market, zoom);
+  const lo = bandIndex * h;
   const start = column * market.colSecs;
-  return { bandIndex, column, lo, hi: lo + market.band - 1n, start, end: start + market.colSecs };
+  return { bandIndex, column, zoom, lo, hi: lo + h - 1n, start, end: start + market.colSecs };
+}
+
+/** Raw multiplier (bps, before range limits) for a box, or Infinity when it cannot be hit. */
+function rawMultBps(book: Book, box: Box, price: bigint, now: number, sigma: number): number {
+  const p = windowTouchProbability(price, box.lo, box.hi, box.start - now, box.end - box.start,
+    sigma * DRIFT_VOL_SCALE, sigma * WINDOW_VOL_SCALE);
+  return p > 0 ? (ONE_X_BPS - book.edgeBps) / p : Infinity;
+}
+
+/**
+ * The zoom whose grid shows a real gradient right now: the box three rows above the price, two
+ * columns out, should pay about `targetX` (calm markets zoom in, busy markets zoom out).
+ */
+export function idealZoom(market: Market, book: Book, price: bigint, now: number, sigma: number, targetX = 10): number {
+  let best = 0, bestErr = Infinity;
+  const column = Math.floor(now / market.colSecs) + 2;
+  for (let z = 0; z <= MAX_ZOOM; z++) {
+    const row = price / rowHeight(market, z);
+    const m = rawMultBps(book, boxAt(market, row + 3n, column, z), price, now, sigma) / ONE_X_BPS;
+    const err = Math.abs(Math.log(Math.min(m, 1e6)) - Math.log(targetX));
+    if (err < bestErr) { best = z; bestErr = err; }
+  }
+  return best;
 }
 
 export type QuoteResult =

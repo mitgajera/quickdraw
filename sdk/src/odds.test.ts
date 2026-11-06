@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { Keypair } from "@solana/web3.js";
 import type { Book, Candles, Market } from "./accounts";
 import { CANDLE_SLOTS } from "./constants";
-import { boxAt, judge, multiplierBps, normCdf, quoteBox, sigmaFromCandles, touchProbability, windowTouchProbability } from "./odds";
+import { boxAt, idealZoom, judge, multiplierBps, normCdf, quoteBox, sigmaFromCandles, touchProbability, windowTouchProbability } from "./odds";
 
 const close = (a: number, b: number, tol: number) => assert.ok(Math.abs(a - b) < tol, `${a} vs ${b}`);
 
@@ -60,6 +60,16 @@ test("quotes boxes like tap.rs", () => {
   assert.ok(Math.abs(windowTouchProbability(0n, 200n, 300n, 4, 4, 250, 100) - 0.28198) < 0.0015);
   assert.deepEqual(quoteBox(book, boxAt(market, 2251n, 250_000), price, now, 1_800_000), { ok: false, reason: "locked" });
   assert.deepEqual(quoteBox(book, boxAt(market, 2251n, 250_040), price, now, 1_800_000), { ok: false, reason: "too-far" });
+});
+
+test("zoom scales rows like tap.rs and busy markets zoom out", () => {
+  const b = boxAt(market, 1125n, 250_002, 1);
+  assert.equal(b.lo, 9_000_000_000n);
+  assert.equal(b.hi, 9_007_999_999n);
+  const price = 8_998_000_000n, now = 1_000_001;
+  const calm = idealZoom(market, book, price, now, 1_800_000);
+  const busy = idealZoom(market, book, price, now, 1_800_000 * 8);
+  assert.ok(busy > calm, `calm ${calm} busy ${busy}`);
 });
 
 test("judges like Candles::judge", () => {

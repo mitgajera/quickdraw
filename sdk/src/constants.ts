@@ -28,6 +28,8 @@ export const VOL_WINDOW_SECS = 30;
 export const DRIFT_VOL_SCALE = 2.5;
 export const WINDOW_VOL_SCALE = 1.0;
 export const MIN_VOL_SAMPLES = 5;
+/** Grid zoom: rows are `market.band << zoom`, zoom 0..MAX_ZOOM (lib.rs `MAX_ZOOM`). */
+export const MAX_ZOOM = 4;
 export const CANDLE_SLOTS = 256;
 export const MAX_TAPS = 12;
 export const ONE_X_BPS = 10_000;
