@@ -1,3 +1,5 @@
+import { Game } from "@/components/Game";
+
 export default function Page() {
-  return <main className="app">Quickdraw</main>;
+  return <Game />;
 }

@@ -1,0 +1,281 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useWallet } from "@solana/wallet-adapter-react";
+import { WalletReadyState } from "@solana/wallet-adapter-base";
+import { Transaction } from "@solana/web3.js";
+import { USD, explainError, ix, sendSigned, type Symbol } from "@quickdraw/sdk";
+import { Board } from "./Board";
+import { useAccount, type Stage } from "@/lib/account";
+import { erBlockhash, er, forgetGuest, guestSigner, prefs, sessionKey, type AppSigner } from "@/lib/chain";
+import { LiveModel } from "@/lib/live";
+
+const SYMBOLS: Symbol[] = ["SOL", "BTC", "ETH"];
+const STAKES = [1, 5, 10, 25];
+const DECIMALS: Record<Symbol, number> = { SOL: 4, BTC: 1, ETH: 2 };
+const usd = (v: bigint | number) => {
+  const n = typeof v === "bigint" ? Number(v) / 1e6 : v;
+  return `${n < 0 ? "−" : ""}$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
+const short = (s: string) => `${s.slice(0, 4)}…${s.slice(-3)}`;
+
+export function Game() {
+  const wallet = useWallet();
+  const [guest, setGuest] = useState<AppSigner | null>(null);
+  useEffect(() => { if (prefs.usedGuest()) setGuest(guestSigner(false)); }, []);
+
+  const signer = useMemo<AppSigner | null>(() => {
+    if (wallet.publicKey && wallet.signTransaction) {
+      return { kind: "wallet", publicKey: wallet.publicKey, signTransaction: wallet.signTransaction };
+    }
+    return guest;
+  }, [wallet.publicKey, wallet.signTransaction, guest]);
+
+  const [symbol, setSymbol] = useState<Symbol>("SOL");
+  const model = useMemo(() => new LiveModel(symbol), [symbol]);
+  const [, rerender] = useReducer((x: number) => x + 1, 0);
+  useEffect(() => { model.start(); const off = model.subscribe(rerender); return () => { off(); model.stop(); }; }, [model]);
+  useEffect(() => { model.setOwner(signer?.publicKey ?? null); }, [model, signer]);
+
+  const account = useAccount(signer);
+
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  useEffect(() => setTheme(prefs.theme()), []);
+  useEffect(() => { document.documentElement.dataset.theme = theme; prefs.setTheme(theme); }, [theme]);
+
+  const [stake, setStake] = useState(5);
+  useEffect(() => setStake(prefs.stake()), []);
+
+  const [latency, setLatency] = useState<number | null>(null);
+  const [flash, setFlash] = useState(false);
+  const [toast, setToast] = useState<{ text: string; bad: boolean } | null>(null);
+  const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const say = useCallback((text: string, bad = false) => {
+    setToast({ text, bad }); clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 3200);
+  }, []);
+
+  const firstPrice = useRef<{ symbol: Symbol; p: number } | null>(null);
+  const price = model.price === null ? null : Number(model.price) / 1e8;
+  if (price !== null && firstPrice.current?.symbol !== symbol) firstPrice.current = { symbol, p: price };
+  const change = price !== null && firstPrice.current ? ((price - firstPrice.current.p) / firstPrice.current.p) * 100 : 0;
+
+  const player = model.player;
+  const openTaps = player?.taps.filter((t) => t.open).length ?? 0;
+
+  const onTap = useCallback(async (bandIndex: bigint, column: number, multBps: number) => {
+    if (account.stage !== "ready" || !signer) return;
+    const session = sessionKey(signer.publicKey, false);
+    if (!session) return;
+    const amount = BigInt(stake) * USD;
+    if (!player || player.balance < amount) { say("Not enough balance for that stake", true); return; }
+    const key = `${column}:${bandIndex}:${Date.now()}`;
+    model.pending.push({ key, bandIndex, column, stake: amount, multBps, at: Date.now() / 1000 });
+    try {
+      const tx = new Transaction().add(ix.placeTap({
+        signer: session.publicKey, owner: signer.publicKey, market: model.keys,
+        bandIndex, column, stake: amount, minMultBps: Math.floor(multBps * 0.85),
+      }));
+      tx.recentBlockhash = await erBlockhash();
+      tx.feePayer = session.publicKey;
+      tx.sign(session);
+      const r = await sendSigned(er, tx, { skipPreflight: true, pollMs: 15 });
+      setLatency(Math.round(r.ms)); setFlash(true); setTimeout(() => setFlash(false), 900);
+      model.pushFeed({ id: r.signature, who: "you", me: true, tone: "", text: `${usd(amount)} · ${(multBps / 1e4).toFixed(1)}x` });
+    } catch (e) {
+      model.pending = model.pending.filter((p) => p.key !== key);
+      say(explainError(e), true);
+    }
+  }, [account.stage, signer, stake, player, model, say]);
+
+  const connectWallet = async (name: string) => {
+    try {
+      prefs.setMode("wallet");
+      wallet.select(name as Parameters<typeof wallet.select>[0]);
+      setGuest(null);
+    } catch (e) { say(explainError(e), true); }
+  };
+  useEffect(() => {
+    if (wallet.wallet && !wallet.connected && !wallet.connecting) wallet.connect().catch(() => {});
+  }, [wallet]);
+
+  const playAsGuest = () => { prefs.setMode("guest"); setGuest(guestSigner(true)); };
+  const disconnect = async () => {
+    if (signer?.kind === "wallet") await wallet.disconnect();
+    else { setGuest(null); prefs.setMode("wallet"); }
+  };
+
+  const detected = wallet.wallets.filter((w) => w.readyState === WalletReadyState.Installed || w.readyState === WalletReadyState.Loadable);
+
+  return (
+    <main className="app">
+      <header className="top">
+        <div className="logo"><span className="mark" /><span className="word">Quickdraw</span></div>
+        <nav className="mkts" aria-label="Markets">
+          {SYMBOLS.map((s) => (
+            <button key={s} className="mkt" aria-pressed={s === symbol} onClick={() => setSymbol(s)}>{s}</button>
+          ))}
+        </nav>
+        <div className="right">
+          <div className={`badge${flash ? " flash" : ""}`} title="Time from tap to confirmation on the MagicBlock rollup">
+            <span className={`pulse${model.erOk ? "" : " off"}`} />
+            <span>{latency === null ? "ER · live" : `tap → ER · ${latency}ms`}</span>
+          </div>
+          {player && (
+            <div className="bal"><span className="lbl">Balance</span><b>{usd(player.balance)}</b></div>
+          )}
+          <button className="iconbtn" aria-label="Toggle theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+            {theme === "dark" ? "☾" : "☀"}
+          </button>
+          <WalletButton signer={signer} onDisconnect={disconnect} />
+        </div>
+      </header>
+
+      <section className="hero">
+        <div>
+          <div className="pair">{symbol} / USD <span className="live">LIVE</span></div>
+          <div className="px">{price === null ? "—" : price.toFixed(DECIMALS[symbol])}</div>
+        </div>
+        <div className="chg" style={{ color: change >= 0 ? "var(--win)" : "var(--loss)" }}>
+          {change >= 0 ? "+" : ""}{change.toFixed(3)}%
+        </div>
+        <p className="hint">Tap a box. If the price touches it before its column closes, you win the multiplier.</p>
+      </section>
+
+      <div className="body">
+        <div className="boardwrap">
+          <Board model={model} stake={stake} canTap={account.stage === "ready"} onTap={onTap} />
+          {account.stage !== "ready" && (
+            <Onboarding
+              stage={account.stage} busy={account.busy} error={account.error} wallets={detected.map((w) => w.adapter.name)}
+              onWallet={connectWallet} onGuest={playAsGuest} onActivate={account.activate}
+            />
+          )}
+        </div>
+        <aside className="side">
+          <div className="card">
+            <div className="card-h"><span>Live taps</span><span>{model.online} trading</span></div>
+            {model.feed.length === 0 ? <p className="empty">Waiting for the first tap…</p> : (
+              <ul className="list">
+                {model.feed.map((f) => (
+                  <li key={f.id}><span className={`who${f.me ? " me" : ""}`}>{f.who}</span><span className={`mono ${f.tone}`}>{f.text}</span></li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="card">
+            <div className="card-h"><span>Leaders</span><span>P&amp;L</span></div>
+            {model.leaders.length === 0 ? <p className="empty">No trades yet.</p> : (
+              <ol className="list">
+                {model.leaders.map((l, i) => (
+                  <li key={l.owner}>
+                    <span className={`who${l.me ? " me" : ""}`}>{i + 1}. {l.me ? "you" : short(l.owner)}</span>
+                    <span className={`mono ${l.pnl > 0n ? "win" : l.pnl < 0n ? "loss" : ""}`}>{usd(l.pnl)}</span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
+          {model.book && (
+            <div className="card">
+              <div className="card-h"><span>House pool</span><span>edge {(model.book.edgeBps / 100).toFixed(0)}%</span></div>
+              <ul className="list">
+                <li><span className="who">Liquidity</span><span className="mono">{usd(model.book.liquidity)}</span></li>
+                <li><span className="who">Open exposure</span><span className="mono">{usd(model.book.exposure)}</span></li>
+                <li><span className="who">Volume</span><span className="mono">{usd(model.book.volume)}</span></li>
+                <li><span className="who">Taps</span><span className="mono">{model.book.taps.toString()}</span></li>
+              </ul>
+            </div>
+          )}
+        </aside>
+      </div>
+
+      <footer className="dock">
+        <div className="stakes"><span className="lbl">Stake</span>
+          {STAKES.map((s) => (
+            <button key={s} className="chip" aria-pressed={s === stake} onClick={() => { setStake(s); prefs.setStake(s); }}>${s}</button>
+          ))}
+        </div>
+        <div className="stats">
+          <div><span className="lbl">Streak</span><b>{player?.streak ?? 0}{(player?.streak ?? 0) >= 3 ? " 🔥" : ""}</b></div>
+          <div><span className="lbl">Open</span><b>{openTaps}</b></div>
+          <div><span className="lbl">Wins</span><b>{player?.wins ?? 0}</b></div>
+          <div>
+            <span className="lbl">P&amp;L</span>
+            <b style={{ color: (player?.pnl ?? 0n) > 0n ? "var(--win)" : (player?.pnl ?? 0n) < 0n ? "var(--loss)" : undefined }}>
+              {player ? `${player.pnl > 0n ? "+" : ""}${usd(player.pnl)}` : "$0.00"}
+            </b>
+          </div>
+        </div>
+      </footer>
+
+      {toast && <div className={`toast${toast.bad ? " bad" : ""}`} role="status">{toast.text}</div>}
+    </main>
+  );
+}
+
+function WalletButton({ signer, onDisconnect }: { signer: AppSigner | null; onDisconnect: () => void }) {
+  const [open, setOpen] = useState(false);
+  if (!signer) return null;
+  return (
+    <div style={{ position: "relative" }}>
+      <button className="btn" onClick={() => setOpen(!open)}>
+        <span className="mono">{signer.kind === "guest" ? "guest " : ""}{short(signer.publicKey.toBase58())}</span>
+      </button>
+      {open && (
+        <div className="card" style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 10, minWidth: 180 }}>
+          <button className="btn" style={{ width: "100%" }} onClick={() => { setOpen(false); onDisconnect(); }}>Disconnect</button>
+          {signer.kind === "guest" && (
+            <button className="btn" style={{ width: "100%", marginTop: 6 }} onClick={() => { forgetGuest(); setOpen(false); onDisconnect(); }}>
+              Forget guest wallet
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const STEPS: { stage: Stage[]; text: string }[] = [
+  { stage: ["new"], text: "Mint $1,000 test USD (devnet)" },
+  { stage: ["new", "undelegated"], text: "Open your account on the MagicBlock rollup" },
+  { stage: ["new", "undelegated", "session"], text: "Authorise this browser to tap without popups for 24h" },
+];
+
+function Onboarding(props: {
+  stage: Stage; busy: string | null; error: string | null; wallets: string[];
+  onWallet: (name: string) => void; onGuest: () => void; onActivate: () => void;
+}) {
+  const { stage, busy, error, wallets } = props;
+  return (
+    <div className="overlay">
+      <div className="onboard">
+        {stage === "disconnected" && (
+          <>
+            <h2>Fastest tap wins.</h2>
+            <p>Tap a box on the live chart. If the price touches it before its column closes, you win the multiplier. Odds are computed on-chain, taps land in ~50ms on a MagicBlock rollup, and every result is settled from on-chain price candles.</p>
+            <div className="row">
+              {wallets.map((w) => <button key={w} className="btn primary" onClick={() => props.onWallet(w)}>Connect {w}</button>)}
+              <button className={`btn${wallets.length ? "" : " primary"}`} onClick={props.onGuest}>Play as guest</button>
+            </div>
+          </>
+        )}
+        {stage === "checking" && <p>Checking your account…</p>}
+        {(stage === "new" || stage === "undelegated" || stage === "session") && (
+          <>
+            <h2>{stage === "new" ? "One signature to start" : stage === "undelegated" ? "Resume playing" : "Authorise this browser"}</h2>
+            <ul className="steps">
+              {STEPS.map((s, i) => (
+                <li key={s.text}><span className="n">0{i + 1}</span><span className={s.stage.includes(stage) ? "" : "done"}>{s.text}</span></li>
+              ))}
+            </ul>
+            <button className="btn primary" disabled={!!busy} onClick={props.onActivate}>
+              {busy ?? (stage === "new" ? "Start playing" : stage === "undelegated" ? "Resume" : "Authorise")}
+            </button>
+          </>
+        )}
+        {error && <p className="err">{error}</p>}
+      </div>
+    </div>
+  );
+}
