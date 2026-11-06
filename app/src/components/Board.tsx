@@ -17,6 +17,9 @@ const mix = (a: string, b: string, t: number) => { const A = hexRgb(a), B = hexR
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 const money = (v: number) => `${v < 0 ? "−" : ""}$${Math.abs(v).toFixed(2)}`;
 const fmtMult = (bps: number) => { const m = bps / 1e4; return `${m < 10 ? m.toFixed(1) : Math.round(m)}x`; };
+/** "$5.00 · 3.2x", or just the multiplier when the box is too narrow (phones). */
+const betLabel = (stake: number, bps: number, width: number) =>
+  width < 110 ? fmtMult(bps) : `${money(stake / 1e6)} · ${fmtMult(bps)}`;
 const hash = (s: string) => { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0; return (h >>> 0) / 4294967295; };
 
 interface Props {
@@ -191,11 +194,31 @@ export function Board({ model, stake, canTap, onTap }: Props) {
       for (const t of model.player?.taps ?? []) {
         if (!t.open || !t.market.equals(model.keys.market)) continue;
         const c = cellRect(t.start, t.lo);
-        drawBlock(c.x, c.y, c.w, c.h, T.accent, `${money(Number(t.stake) / 1e6)} · ${fmtMult(t.multBps)}`, T.bg);
+        drawBlock(c.x, c.y, c.w, c.h, T.accent, betLabel(Number(t.stake), t.multBps, c.w), T.bg);
+        if (rt >= t.start && rt < t.end) {
+          // live window: pulsing outline and a bar draining as the column runs out
+          const left = clamp((t.end - rt) / (t.end - t.start), 0, 1);
+          ctx.strokeStyle = rgba(T.ink, reduced ? 0.9 : 0.55 + 0.4 * Math.sin(nowMs / 140));
+          ctx.lineWidth = 2; ctx.strokeRect(c.x + 2, c.y + 2, c.w - 4, c.h - 4);
+          ctx.fillStyle = rgba(T.bg, 0.55); ctx.fillRect(c.x + 1, c.y + c.h - 5, (c.w - 2) * left, 4);
+        }
+      }
+      for (const cf of model.confirms) {
+        const age = Date.now() / 1000 - cf.at;
+        if (age > 1.4) continue;
+        const c = cellRect(cf.column * col, cf.bandIndex * market.band);
+        const txt = `✓ ${cf.ms}ms`;
+        ctx.font = `600 11px ${monoFont}`;
+        const tw = ctx.measureText(txt).width + 12;
+        ctx.globalAlpha = clamp(1.4 - age, 0, 1);
+        ctx.fillStyle = T.ink; ctx.fillRect(c.x + c.w / 2 - tw / 2, c.y - 20 - age * 10, tw, 18);
+        ctx.fillStyle = T.bg; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(txt, c.x + c.w / 2, c.y - 11 - age * 10);
+        ctx.globalAlpha = 1;
       }
       for (const p of model.pending) {
         const c = cellRect(p.column * col, p.bandIndex * market.band);
-        drawBlock(c.x, c.y, c.w, c.h, rgba(T.accent, 0.45), `${money(Number(p.stake) / 1e6)} · ${fmtMult(p.multBps)}`, T.bg, 0.6 + 0.3 * Math.sin(nowMs / 120));
+        drawBlock(c.x, c.y, c.w, c.h, rgba(T.accent, 0.45), betLabel(Number(p.stake), p.multBps, c.w), T.bg, 0.6 + 0.3 * Math.sin(nowMs / 120));
       }
       for (const o of model.others) {
         const h = hash(o.owner.toBase58());

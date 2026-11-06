@@ -34,6 +34,8 @@ export class LiveModel {
   feed: FeedItem[] = [];
   results: Result[] = [];
   pending: Pending[] = [];
+  /** "✓ 52ms" chips drawn over freshly confirmed taps */
+  confirms: { column: number; bandIndex: bigint; ms: number; at: number }[] = [];
   online = 0;
   erOk = true;
   version = 0;
@@ -137,6 +139,7 @@ export class LiveModel {
       && t.lo === p.bandIndex * (this.market?.band ?? 0n)));
     const horizon = Date.now() / 1000 - 90;
     this.results = this.results.filter((r) => r.at > horizon);
+    this.confirms = this.confirms.filter((c) => c.at > Date.now() / 1000 - 2);
   }
 
   /** candles + book, once a second */

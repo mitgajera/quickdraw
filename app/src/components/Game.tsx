@@ -8,7 +8,8 @@ import { USD, explainError, ix, sendSigned, type Symbol } from "@quickdraw/sdk";
 import { Board } from "./Board";
 import { useAccount, type Stage } from "@/lib/account";
 import { erBlockhash, er, forgetGuest, guestSigner, prefs, sessionKey, type AppSigner } from "@/lib/chain";
-import { LiveModel } from "@/lib/live";
+import { LiveModel, type Result } from "@/lib/live";
+import { sound } from "@/lib/sound";
 
 const SYMBOLS: Symbol[] = ["SOL", "BTC", "ETH"];
 const STAKES = [1, 5, 10, 25];
@@ -69,6 +70,7 @@ export function Game() {
     if (!session) return;
     const amount = BigInt(stake) * USD;
     if (!player || player.balance < amount) { say("Not enough balance for that stake", true); return; }
+    sound.tap();
     const key = `${column}:${bandIndex}:${Date.now()}`;
     model.pending.push({ key, bandIndex, column, stake: amount, multBps, at: Date.now() / 1000 });
     try {
@@ -80,7 +82,10 @@ export function Game() {
       tx.feePayer = session.publicKey;
       tx.sign(session);
       const r = await sendSigned(er, tx, { skipPreflight: true, pollMs: 15 });
-      setLatency(Math.round(r.ms)); setFlash(true); setTimeout(() => setFlash(false), 900);
+      const ms = Math.round(r.ms);
+      sound.confirm();
+      model.confirms.push({ column, bandIndex, ms, at: Date.now() / 1000 });
+      setLatency(ms); setFlash(true); setTimeout(() => setFlash(false), 900);
       model.pushFeed({ id: r.signature, who: "you", me: true, tone: "", text: `${usd(amount)} · ${(multBps / 1e4).toFixed(1)}x` });
     } catch (e) {
       model.pending = model.pending.filter((p) => p.key !== key);
