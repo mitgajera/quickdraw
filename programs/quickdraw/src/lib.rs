@@ -118,4 +118,16 @@ pub mod quickdraw {
         instructions::undelegate_player_handler(ctx)
     }
 
+    // --- trading ---
+
+    pub fn place_tap(
+        ctx: Context<PlaceTap>,
+        band_index: i64,
+        column: i64,
+        stake: u64,
+        min_mult_bps: u32,
+    ) -> Result<()> {
+        instructions::place_tap_handler(ctx, band_index, column, stake, min_mult_bps)
+    }
+
 }
