@@ -1,5 +1,5 @@
 // Quickdraw keeper: records oracle ticks into each market's candle ring on the ER and settles taps
-// the moment the candles decide them. Also sponsors devnet SOL for guest wallets.
+// the moment the candles decide them. Also tops up new player wallets with a little devnet SOL.
 import http from "node:http";
 import { ComputeBudgetProgram, Connection, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction, type Keypair } from "@solana/web3.js";
 import {
@@ -119,7 +119,7 @@ function settleLoop() {
   }, config.settleMs);
 }
 
-// ---------- guest sponsorship (devnet only) ----------
+// ---------- devnet SOL top-ups for new player wallets ----------
 const sponsored = new Set<string>();
 
 async function sponsor(target: PublicKey) {
