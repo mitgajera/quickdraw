@@ -32,6 +32,12 @@ pub const TAP_LOCK_SECS: i64 = 1;
 pub const MAX_AHEAD_SECS: i64 = 120;
 /// Seconds of candles used for the volatility estimate behind the odds.
 pub const VOL_WINDOW_SECS: i64 = 30;
+/// Scales on the candle volatility estimate (per-second midpoint moves, which read low): how far the
+/// price drifts before a column opens, and how far it wanders inside the 4-second column. Fitted on
+/// recorded devnet oracle data (SOL/BTC/ETH): hit rates match by row and by column, and realised
+/// return-to-player sits at 0.8-1.06 in every multiplier range (about 1 - edge overall).
+pub const DRIFT_VOL_SCALE: f64 = 2.5;
+pub const WINDOW_VOL_SCALE: f64 = 1.0;
 /// After this long past a column, taps settle on whatever the ring holds (refund if nothing).
 pub const SETTLE_TIMEOUT_SECS: i64 = 30;
 

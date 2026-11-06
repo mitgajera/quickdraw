@@ -2,12 +2,12 @@ use anchor_lang::prelude::*;
 
 use crate::error::QuickdrawError;
 use crate::events::TapPlaced;
-use crate::odds::{multiplier_bps, touch_probability, ONE_X_BPS};
+use crate::odds::{multiplier_bps, window_touch_probability, ONE_X_BPS};
 use crate::oracle::read_oracle_price;
 use crate::state::{Book, Candles, Market, Player, TapSlot};
 use crate::{
-    BOOK_SEED, MARKET_SEED, MAX_AHEAD_SECS, PLAYER_SEED, TAP_LOCK_SECS, TAP_ORACLE_MAX_AGE,
-    VOL_WINDOW_SECS,
+    BOOK_SEED, DRIFT_VOL_SCALE, MARKET_SEED, MAX_AHEAD_SECS, PLAYER_SEED, TAP_LOCK_SECS,
+    TAP_ORACLE_MAX_AGE, VOL_WINDOW_SECS, WINDOW_VOL_SCALE,
 };
 
 /// A priced box: its band, its column window and the multiplier the house offers.
@@ -54,7 +54,15 @@ pub fn quote(
         .sigma(now, VOL_WINDOW_SECS)
         .unwrap_or(0.0)
         .max(market.sigma_floor as f64);
-    let probability = touch_probability(price, lo, hi, (end - now) as f64, sigma);
+    let probability = window_touch_probability(
+        price,
+        lo,
+        hi,
+        lead as f64,
+        col as f64,
+        sigma * DRIFT_VOL_SCALE,
+        sigma * WINDOW_VOL_SCALE,
+    );
     let mult_bps = multiplier_bps(probability, book.edge_bps)
         .filter(|m| (book.min_mult_bps..=book.max_mult_bps).contains(m))
         .ok_or(QuickdrawError::MultiplierOutOfRange)?;
@@ -262,25 +270,26 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn far_boxes_pay_more_and_boxes_containing_the_price_are_not_offered() {
-        // one and two bands above, column ending 11s out: ~2.9x and ~9.9x
+    fn far_boxes_pay_more_and_the_current_band_pays_least() {
+        // one and two bands above, window opening in 7s: ~3.7x and ~4.7x (dense-integration refs)
         let near = quote(&market(), &book(), &candles(), PRICE, NOW, 2251, 250_002, 1).unwrap();
         let far = quote(&market(), &book(), &candles(), PRICE, NOW, 2252, 250_002, 1).unwrap();
         assert!(far.mult_bps > near.mult_bps);
         assert!(
-            (25_000..35_000).contains(&near.mult_bps),
+            (34_500..38_500).contains(&near.mult_bps),
             "{}",
             near.mult_bps
         );
+        assert!((45_000..50_000).contains(&far.mult_bps), "{}", far.mult_bps);
+        // seven bands above in the next column is beyond the 25x cap: not offered
+        assert!(quote(&market(), &book(), &candles(), PRICE, NOW, 2256, 250_001, 1).is_err());
+        // the band holding today's price is far from certain three seconds out: ~2.1x
+        let inside = quote(&market(), &book(), &candles(), PRICE, NOW, 2249, 250_001, 1).unwrap();
         assert!(
-            (90_000..110_000).contains(&far.mult_bps),
+            (19_500..21_500).contains(&inside.mult_bps),
             "{}",
-            far.mult_bps
+            inside.mult_bps
         );
-        // three bands above in the next column is beyond the 25x cap: not offered
-        assert!(quote(&market(), &book(), &candles(), PRICE, NOW, 2253, 250_001, 1).is_err());
-        let inside = quote(&market(), &book(), &candles(), PRICE, NOW, 2249, 250_001, 1);
-        assert!(inside.is_err());
     }
 
     #[test]
