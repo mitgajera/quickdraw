@@ -6,7 +6,7 @@ Tap trading on Solana. A live price chart becomes a grid of boxes; tap the box y
 
 - **Instant:** no wallet popups, no gas; deposit once and tap.
 - **Provably fair:** odds are computed on-chain and every result is settled from on-chain price data.
-- **Be the house:** anyone can deposit USDC into the house vault and earn the edge.
+- **An open house:** the bankroll is an on-chain LP pool with shares (`lp_add` / `lp_remove`) that earns the edge; an LP screen in the app is next.
 - **Multiplayer:** see everyone's taps land live.
 
 Built for the [MLH x Solana Hackathon](https://events.mlh.com/events/15200-solana-hackathon) (Nov 6–8, 2026).
