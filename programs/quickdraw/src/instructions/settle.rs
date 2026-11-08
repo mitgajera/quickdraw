@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 
 use crate::error::QuickdrawError;
 use crate::events::TapSettled;
-use crate::state::{Book, Candles, Market, Outcome, Player, TapSlot, MAX_TAPS};
+use crate::state::{Book, Candles, Market, Outcome, Player, TapSlot, MAX_TAPS, WALLET_TAP_FLAG};
 use crate::{BOOK_SEED, MARKET_SEED, PLAYER_SEED, SETTLE_TIMEOUT_SECS};
 
 /// Moves money for a decided tap and closes it. Returns what was paid back to the player.
@@ -61,7 +61,7 @@ pub fn settle_handler(ctx: Context<Settle>) -> Result<()> {
     let mut settled = 0;
     for slot in 0..MAX_TAPS {
         let tap = player.taps[slot];
-        if !tap.open || tap.market != market_key {
+        if !tap.open || tap.market != market_key || tap.id & WALLET_TAP_FLAG != 0 {
             continue;
         }
         // the ring is complete up to its last publish second; after the timeout, close the window
@@ -104,11 +104,11 @@ pub fn settle_handler(ctx: Context<Settle>) -> Result<()> {
 #[derive(Accounts)]
 pub struct Settle<'info> {
     #[account(mut, seeds = [PLAYER_SEED, player.owner.as_ref()], bump = player.bump)]
-    pub player: Account<'info, Player>,
+    pub player: Box<Account<'info, Player>>,
     #[account(mut, seeds = [BOOK_SEED], bump = book.bump)]
-    pub book: Account<'info, Book>,
+    pub book: Box<Account<'info, Book>>,
     #[account(seeds = [MARKET_SEED, market.oracle.as_ref()], bump = market.bump)]
-    pub market: Account<'info, Market>,
+    pub market: Box<Account<'info, Market>>,
     #[account(address = market.candles)]
     pub candles: AccountLoader<'info, Candles>,
 }

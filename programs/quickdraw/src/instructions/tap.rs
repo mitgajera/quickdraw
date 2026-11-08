@@ -188,15 +188,15 @@ pub struct PlaceTap<'info> {
     /// The player's owner or their active session key.
     pub signer: Signer<'info>,
     #[account(mut, seeds = [PLAYER_SEED, player.owner.as_ref()], bump = player.bump)]
-    pub player: Account<'info, Player>,
+    pub player: Box<Account<'info, Player>>,
     #[account(mut, seeds = [BOOK_SEED], bump = book.bump)]
-    pub book: Account<'info, Book>,
+    pub book: Box<Account<'info, Book>>,
     #[account(
         seeds = [MARKET_SEED, market.oracle.as_ref()],
         bump = market.bump,
         constraint = market.authority == book.authority @ QuickdrawError::Unauthorized
     )]
-    pub market: Account<'info, Market>,
+    pub market: Box<Account<'info, Market>>,
     #[account(address = market.candles)]
     pub candles: AccountLoader<'info, Candles>,
     /// CHECK: this market's oracle feed; owner and layout are verified when it is read.
