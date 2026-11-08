@@ -135,8 +135,10 @@ export function Board({ model, stake, canTap, onTap, onReject, onBlocked }: Prop
 
       const band = Number(rowHeight(market, model.zoom)) / 1e8, col = market.colSecs;
       const rt = Date.now() / 1000 - model.clockOffset;
-      const nowX = W * (W < 600 ? 0.24 : 0.3), AX = W - 52;
-      const colPx = clamp((AX - nowX) / 5, 70, 150), rowPx = clamp(H / 11, 36, 54);
+      // phones: less history and narrower columns, so four future columns fit beside the price axis
+      const sm = W < 600;
+      const nowX = W * (sm ? 0.17 : 0.3), AX = W - (sm ? 50 : 52);
+      const colPx = clamp((AX - nowX) / 5, sm ? 52 : 70, 150), rowPx = clamp(H / 11, 36, 54);
       L = { rt, nowX, colPx, rowPx, pps: colPx / col, band, col, AX };
       const latest = Number(price) / 1e8;
       if (!camP) { camP = latest; headP = latest; }
