@@ -39,8 +39,10 @@ export function HowItWorks({ book, onClose }: { book: Book | null; onClose: () =
             milliseconds and costs nothing. A browser key that can only tap (not withdraw) signs it for 24 hours.
           </li>
           <li>
-            <b>Your money stays yours.</b> Devnet USDC sits in your game account. Cash out moves it back to Solana and
-            into your wallet. We pay every network fee.
+            <b>Your money never leaves your wallet until you tap.</b> At sign-in your wallet lets the house vault take
+            stakes, nothing is deposited. Each tap&apos;s stake is pulled on Solana by a MagicBlock Magic Action the program
+            schedules from the rollup; a win is paid straight back to your wallet the same way, about a second after it
+            settles. We pay every network fee.
           </li>
           <li>
             <b>An on-chain house.</b> Winnings come from a USDC pool with LP shares that earns the edge. To keep it
