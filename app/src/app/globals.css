@@ -100,9 +100,11 @@ a.btn { text-decoration: none; display: inline-block; }
   100% { opacity: 0; transform: translate(-50%, -6px); }
 }
 .overlay {
-  position: absolute; inset: 0; display: grid; place-items: center; padding: 24px;
-  background: color-mix(in srgb, var(--board) 45%, transparent);
+  position: absolute; left: 0; right: 52px; bottom: 0; display: flex; justify-content: center;
+  padding: 16px; pointer-events: none;
 }
+.overlay .onboard { pointer-events: auto; box-shadow: 0 12px 40px rgba(0,0,0,.35); }
+.connect-top { display: flex; gap: 6px; }
 .side { display: flex; flex-direction: column; gap: 14px; }
 .card { border: 1px solid var(--line); background: var(--panel); border-radius: var(--card-radius); padding: 14px; }
 .card-h {
@@ -134,9 +136,12 @@ a.btn { text-decoration: none; display: inline-block; }
 .stats b { font-family: var(--font-mono), monospace; font-size: 16px; font-variant-numeric: tabular-nums; }
 
 /* onboarding */
-.onboard { width: min(440px, 100%); background: var(--panel); border: 1px solid var(--line); border-radius: var(--card-radius); padding: 22px; }
-.onboard h2 { font-size: 22px; font-weight: 600; margin-bottom: 6px; }
-.onboard p { color: var(--mute); font-size: 14px; line-height: 1.5; margin-bottom: 16px; }
+.onboard {
+  width: min(520px, 100%); background: color-mix(in srgb, var(--panel) 94%, transparent); backdrop-filter: blur(6px);
+  border: 1px solid var(--line); border-radius: var(--card-radius); padding: 16px 18px;
+}
+.onboard h2 { font-size: 19px; font-weight: 600; margin-bottom: 4px; }
+.onboard p { color: var(--mute); font-size: 13.5px; line-height: 1.45; margin-bottom: 12px; }
 .steps { list-style: none; display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }
 .steps li { display: flex; gap: 10px; align-items: baseline; font-size: 14px; }
 .steps .n { font-family: var(--font-mono), monospace; font-size: 11px; color: var(--accent); min-width: 18px; }
@@ -157,7 +162,7 @@ a.btn { text-decoration: none; display: inline-block; }
 
 @media (max-width: 900px) {
   .body { grid-template-columns: 1fr; }
-  .hint, .mkts { display: none; }
+  .hint { display: none; }
   .boardwrap canvas { height: 62vh; min-height: 380px; }
   .px { font-size: 36px; }
 }
@@ -166,6 +171,10 @@ a.btn { text-decoration: none; display: inline-block; }
   .hide-sm { display: none; }
   .top .btn { padding: 8px 10px; }
   .top { gap: 8px; flex-wrap: wrap; }
+  .mkts { order: 3; width: 100%; margin-left: 0; }
+  .mkts .mkt { flex: 1; text-align: center; }
+  .overlay { right: 0; padding: 10px; }
+  .connect-top .btn { padding: 8px 10px; font-size: 12px; }
   .word { font-size: 15px; }
   .bal b { font-size: 13px; }
   .hero { padding-bottom: 10px; }
