@@ -227,3 +227,9 @@ a.btn { text-decoration: none; display: inline-block; }
 /* 10x and up: a bigger, longer celebration */
 .winbanner.big { padding: 16px 26px; border-width: 2px; box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 22%, transparent), 0 18px 60px rgba(0,0,0,.45); }
 .winbanner.big b { font-size: 40px; }
+
+.statline { margin-top: 4px; font-family: var(--font-mono), monospace; font-size: 11px; color: var(--mute); }
+.statline b { color: var(--ink); font-weight: 600; }
+.statline a { color: var(--accent); text-decoration: none; }
+.statline a:hover { text-decoration: underline; }
+a.badge { text-decoration: none; color: inherit; }

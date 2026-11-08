@@ -21,6 +21,8 @@ const usd = (v: bigint | number) => {
   return `${n < 0 ? "−" : ""}$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 const short = (s: string) => `${s.slice(0, 4)}…${s.slice(-3)}`;
+/** Solana Explorer pointed at the MagicBlock rollup, where taps and settlements live. */
+const erExplorer = (path: string) => `https://explorer.solana.com/${path}?cluster=custom&customUrl=${encodeURIComponent(ER_RPC)}`;
 
 export function Game() {
   const auth = usePrivySigner();
@@ -70,6 +72,7 @@ export function Game() {
 
   const [proof, setProof] = useState<Result | null>(null);
   const [latency, setLatency] = useState<number | null>(null);
+  const [lastSig, setLastSig] = useState<string | null>(null);
   const [flash, setFlash] = useState(false);
   const firstPrice = useRef<{ symbol: Symbol; p: number } | null>(null);
   const price = model.price === null ? null : Number(model.price) / 1e8;
@@ -103,7 +106,7 @@ export function Game() {
       const ms = Math.round(r.ms);
       sound.confirm();
       model.confirms.push({ column, lo, hi, ms, at: Date.now() / 1000 });
-      setLatency(ms); setFlash(true); setTimeout(() => setFlash(false), 900);
+      setLatency(ms); setLastSig(r.signature); setFlash(true); setTimeout(() => setFlash(false), 900);
       model.pushFeed({ id: r.signature, who: "you", me: true, tone: "", text: `${usd(amount)} · ${(multBps / 1e4).toFixed(1)}x` });
     } catch (e) {
       model.pending = model.pending.filter((p) => p.key !== key);
@@ -176,10 +179,17 @@ export function Game() {
           ))}
         </nav>
         <div className="right">
-          <div className={`badge${flash ? " flash" : ""}`} title="Time from tap to confirmation on the MagicBlock rollup">
-            <span className={`pulse${model.erOk ? "" : " off"}`} />
-            <span>{latency === null ? "ER · live" : <><span className="hide-sm">tap → ER · </span>{latency}ms</>}</span>
-          </div>
+          {(() => {
+            const inner = <>
+              <span className={`pulse${model.erOk ? "" : " off"}`} />
+              <span>{latency === null ? "ER · live" : <><span className="hide-sm">tap → ER · </span>{latency}ms</>}</span>
+            </>;
+            // after a tap, the badge links to that exact transaction on the rollup's explorer
+            return lastSig
+              ? <a className={`badge${flash ? " flash" : ""}`} href={erExplorer(`tx/${lastSig}`)} target="_blank" rel="noreferrer"
+                  title="Your last tap on the MagicBlock rollup: open it in the explorer">{inner}</a>
+              : <div className={`badge${flash ? " flash" : ""}`} title="Time from tap to confirmation on the MagicBlock rollup">{inner}</div>;
+          })()}
           {player && (
             <div className="bal"><span className="lbl">Balance</span><b>{usd(player.balance)}</b></div>
           )}
@@ -208,7 +218,15 @@ export function Game() {
         <div className="chg" style={{ color: change >= 0 ? "var(--win)" : "var(--loss)" }}>
           {change >= 0 ? "+" : ""}{change.toFixed(3)}%
         </div>
-        <p className="hint">Tap a box. If the price touches it before its column closes, you win the multiplier.</p>
+        <div className="hint">
+          <p>Tap a box. If the price touches it before its column closes, you win the multiplier.</p>
+          {model.book && (
+            <p className="statline">
+              <b>{model.book.taps.toLocaleString()}</b> taps priced &amp; settled on-chain ·{" "}
+              <a href={`https://explorer.solana.com/address/${PROGRAM_ID.toBase58()}?cluster=devnet`} target="_blank" rel="noreferrer">program ↗</a>
+            </p>
+          )}
+        </div>
       </section>
 
       <div className="body">
