@@ -73,8 +73,11 @@ export function useAccount(signer: AppSigner | null) {
     const hasSol = async () => (await base.getBalance(s.publicKey)) >= 0.02 * LAMPORTS_PER_SOL;
     if ((await hasSol()) && !wantUsdc) return;
     setBusy(wantUsdc ? "Sending you starter USDC…" : "Covering your network fees…");
+    const token = await s.authToken().catch(() => null);
     const res = await fetch(`${KEEPER_URL}/welcome`, {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ wallet: s.publicKey.toBase58() }),
+      method: "POST",
+      headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify({ wallet: s.publicKey.toBase58() }),
     }).then((r) => r.json() as Promise<{ ok?: boolean; usdc?: number; error?: string }>).catch(() => ({ ok: false, usdc: 0, error: "the game server is waking up, try again in a moment" }));
     if (!res.ok) throw new Error(`Could not set up your wallet: ${res.error ?? "unknown error"}`);
     for (let i = 0; i < 40; i++) {

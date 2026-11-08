@@ -15,7 +15,9 @@ export const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? "cmw7jsye300
 const CREATE_GRACE_MS = 2500;
 
 export function usePrivySigner() {
-  const { ready, authenticated, login, logout, user } = usePrivy();
+  const { ready, authenticated, login, logout, user, getAccessToken } = usePrivy();
+  const tokenRef = useRef(getAccessToken);
+  tokenRef.current = getAccessToken;
   const { wallets, ready: walletsReady } = useWallets();
   const { signTransaction } = useSignTransaction();
   const { createWallet } = useCreateWallet();
@@ -64,6 +66,7 @@ export function usePrivySigner() {
         });
         return Transaction.from(signedTransaction);
       },
+      authToken: () => tokenRef.current(),
     };
     // re-create only when the wallet itself changes
     // eslint-disable-next-line react-hooks/exhaustive-deps

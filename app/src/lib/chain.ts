@@ -17,6 +17,8 @@ export interface AppSigner {
   kind: "wallet";
   publicKey: PublicKey;
   signTransaction: (tx: Transaction) => Promise<Transaction>;
+  /** The player's Privy access token, which the keeper checks before covering fees. */
+  authToken: () => Promise<string | null>;
 }
 
 const store = {
