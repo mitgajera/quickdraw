@@ -11,10 +11,10 @@ const DESCRIPTION = "Tap the box the price will hit. Odds priced on-chain, taps 
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE),
-  title: "Quickdraw — fastest tap wins",
+  title: "Quickdraw | fastest tap wins",
   description: DESCRIPTION,
-  openGraph: { title: "Quickdraw — fastest tap wins", description: DESCRIPTION, url: SITE, siteName: "Quickdraw", type: "website" },
-  twitter: { card: "summary_large_image", title: "Quickdraw — fastest tap wins", description: DESCRIPTION },
+  openGraph: { title: "Quickdraw | fastest tap wins", description: DESCRIPTION, url: SITE, siteName: "Quickdraw", type: "website" },
+  twitter: { card: "summary_large_image", title: "Quickdraw | fastest tap wins", description: DESCRIPTION },
 };
 
 export const viewport: Viewport = { themeColor: "#0A0A0C", width: "device-width", initialScale: 1 };
