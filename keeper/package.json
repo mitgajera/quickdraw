@@ -13,7 +13,8 @@
   },
   "dependencies": {
     "@quickdraw/sdk": "workspace:*",
-    "@solana/web3.js": "^1.98.4"
+    "@solana/web3.js": "^1.98.4",
+    "jose": "^6.2.15"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",

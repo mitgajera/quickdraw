@@ -2,6 +2,7 @@
 // the moment the candles decide them. Also welcomes new player wallets with devnet SOL for fees and a
 // little starter USDC, so a player who signs in with Google or X can tap straight away.
 import http from "node:http";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 import { ComputeBudgetProgram, Connection, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction, type Keypair } from "@solana/web3.js";
 import {
   PLAYER_SIZE, PROGRAM_ID, SETTLE_TIMEOUT_SECS, ataOf, createAtaIdempotent, decodeCandles, decodePlayer, explainError, ix, judge,
@@ -123,16 +124,51 @@ function settleLoop() {
 }
 
 // ---------- welcome grants for new player wallets ----------
-// Devnet SOL for base-layer fees and rent, plus a little starter USDC from the keeper's own wallet,
-// once per wallet and only while the grant budget lasts. A wallet that already has a game account or
-// its own USDC gets the SOL top-up only.
+// Devnet SOL for base-layer fees and rent, plus a little starter USDC from the keeper's own wallet.
+// Only for players signed in with Privy (the access token is verified against Privy's public keys),
+// once per wallet and per Privy user, rate-limited per IP, and only while the SOL and USDC budgets
+// last. A wallet that already has a game account or its own USDC gets the SOL top-up only.
 const welcomed = new Set<string>();
+const welcomedUsers = new Set<string>();
+const ipHits = new Map<string, number[]>();
 let welcomeSpent = 0n;
+let solSpent = 0;
+const privyKeys = config.privyAppId
+  ? createRemoteJWKSet(new URL(`https://auth.privy.io/api/v1/apps/${config.privyAppId}/jwks.json`))
+  : null;
 
-async function welcome(target: PublicKey) {
+class HttpError extends Error {
+  constructor(public status: number, message: string) { super(message); }
+}
+
+/** The Privy user id behind a request's bearer token, or null when auth is switched off. */
+async function privyUser(req: http.IncomingMessage): Promise<string | null> {
+  if (!privyKeys) return null;
+  const token = req.headers.authorization?.replace(/^Bearer\s+/i, "");
+  if (!token) throw new HttpError(401, "sign in first");
+  try {
+    const { payload } = await jwtVerify(token, privyKeys, { issuer: "privy.io", audience: config.privyAppId });
+    if (!payload.sub) throw new Error("no subject");
+    return payload.sub;
+  } catch {
+    throw new HttpError(401, "your sign-in expired, sign in again");
+  }
+}
+
+function rateLimit(req: http.IncomingMessage) {
+  const ip = (req.headers["x-forwarded-for"]?.toString().split(",")[0] ?? req.socket.remoteAddress ?? "?").trim();
+  const now = Date.now();
+  const hits = (ipHits.get(ip) ?? []).filter((t) => now - t < 3_600_000);
+  if (hits.length >= config.welcomePerIpHour) throw new HttpError(429, "too many new wallets from here, try again later");
+  hits.push(now);
+  ipHits.set(ip, hits);
+}
+
+async function welcome(target: PublicKey, user: string | null) {
   const key = target.toBase58();
-  if (welcomed.has(key)) return { ok: true, reason: "already welcomed", usdc: 0 };
+  if (welcomed.has(key) || (user && welcomedUsers.has(user))) return { ok: true, reason: "already welcomed", usdc: 0 };
   welcomed.add(key);
+  if (user) welcomedUsers.add(user);
   try {
     const [lamports, player, usdc, keeperUsdc] = await Promise.all([
       base.getBalance(target),
@@ -141,7 +177,9 @@ async function welcome(target: PublicKey) {
       base.getTokenAccountBalance(ataOf(keeper.publicKey)).then((r) => BigInt(r.value.amount)).catch(() => 0n),
     ]);
     const ixs = [];
-    if (lamports < config.sponsorLamports / 2) {
+    const needsSol = lamports < config.sponsorLamports / 2;
+    if (needsSol && solSpent + config.sponsorLamports > config.solBudget) throw new HttpError(503, "the fee budget is used up for now");
+    if (needsSol) {
       ixs.push(SystemProgram.transfer({ fromPubkey: keeper.publicKey, toPubkey: target, lamports: config.sponsorLamports }));
     }
     const grant = !player && usdc === 0n && welcomeSpent + config.welcomeUsdc <= config.welcomeBudget && keeperUsdc >= config.welcomeUsdc
@@ -149,13 +187,19 @@ async function welcome(target: PublicKey) {
     if (grant > 0n) ixs.push(createAtaIdempotent(keeper.publicKey, target), transferTokens(keeper.publicKey, target, grant));
     if (!ixs.length) return { ok: true, reason: "nothing to send", usdc: 0 };
     if (grant > 0n) welcomeSpent += grant;
-    const r = await sendWithKeypairs(base, ixs, [keeper], { pollMs: 400 }).catch((e) => { welcomeSpent -= grant; throw e; });
+    if (needsSol) solSpent += config.sponsorLamports;
+    const r = await sendWithKeypairs(base, ixs, [keeper], { pollMs: 400 }).catch((e) => {
+      welcomeSpent -= grant;
+      if (needsSol) solSpent -= config.sponsorLamports;
+      throw e;
+    });
     if (lamports < config.sponsorLamports / 2) stats.sponsored++;
     if (grant > 0n) { stats.welcomed++; stats.welcomeUsdc = Number(welcomeSpent) / 1e6; }
     log(`welcomed ${key.slice(0, 6)}: ${lamports < config.sponsorLamports / 2 ? `${config.sponsorLamports / LAMPORTS_PER_SOL} SOL` : "no SOL"}, ${Number(grant) / 1e6} USDC`);
     return { ok: true, signature: r.signature, usdc: Number(grant) / 1e6 };
   } catch (e) {
     welcomed.delete(key);
+    if (user) welcomedUsers.delete(user);
     throw e;
   }
 }
@@ -169,7 +213,7 @@ async function readWallet(req: http.IncomingMessage) {
 function serve() {
   http.createServer(async (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Headers", "content-type");
+    res.setHeader("Access-Control-Allow-Headers", "content-type, authorization");
     res.setHeader("Content-Type", "application/json");
     if (req.method === "OPTIONS") { res.end(); return; }
     try {
@@ -179,12 +223,15 @@ function serve() {
       if (url.pathname === "/bots") { res.end(JSON.stringify(bots.map((b) => b.publicKey.toBase58()))); return; }
       // "/sponsor" is the old name, kept for app builds that still call it
       if ((url.pathname === "/welcome" || url.pathname === "/sponsor") && req.method === "POST") {
-        res.end(JSON.stringify(await welcome(await readWallet(req))));
+        const user = await privyUser(req);
+        rateLimit(req);
+        res.end(JSON.stringify(await welcome(await readWallet(req), user)));
         return;
       }
       res.statusCode = 404; res.end(JSON.stringify({ error: "not found" }));
     } catch (e) {
-      res.statusCode = 400; res.end(JSON.stringify({ error: explainError(e) }));
+      res.statusCode = e instanceof HttpError ? e.status : 400;
+      res.end(JSON.stringify({ error: e instanceof HttpError ? e.message : explainError(e) }));
     }
   }).listen(config.port, () => log(`http on :${config.port} (/health, /bots, POST /welcome)`));
 }

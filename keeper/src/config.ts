@@ -23,6 +23,12 @@ export const config = {
   welcomeUsdc: BigInt(env("WELCOME_USDC", "1000000")),
   /** Total starter USDC this keeper process will hand out before it stops granting. */
   welcomeBudget: BigInt(env("WELCOME_BUDGET", "15000000")),
+  /** Total devnet SOL (lamports) this keeper process will send to new wallets. */
+  solBudget: Number(env("WELCOME_SOL_BUDGET", String(3_000_000_000))),
+  /** Welcome requests allowed per client IP per hour. */
+  welcomePerIpHour: Number(env("WELCOME_PER_IP_HOUR", "6")),
+  /** Privy app whose login tokens /welcome accepts; set PRIVY_APP_ID="" to accept unauthenticated calls. */
+  privyAppId: env("PRIVY_APP_ID", "cmw7jsye300eu0hjq0s6f7jns"),
 };
 
 const parseSecret = (json: string) => Keypair.fromSecretKey(Uint8Array.from(JSON.parse(json) as number[]));
