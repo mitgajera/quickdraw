@@ -534,11 +534,23 @@ export function ProofModal({ result, symbol, decimals, owner, onClose }: {
   const time = (sec: number) => new Date(sec * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   const bars = evidence?.bars ?? [];
   const lo = Number(tap.lo), hi = Number(tap.hi) + 1;
-  const prices = [lo, hi, ...bars.flatMap((b) => [Number(b.low), Number(b.high)])];
-  const min = Math.min(...prices), max = Math.max(...prices), pad = (max - min) * 0.15 || 1;
-  const W = 380, H = 150, L = 8, R = 8;
-  const y = (p: number) => 8 + (1 - (p - (min - pad)) / (max - min + 2 * pad)) * (H - 16);
-  const cols = Math.max(1, tap.end - tap.start), cw = (W - L - R) / cols;
+  // zoom to where the price actually traded; the box is a band that may run off the chart
+  const bLow = bars.length ? Math.min(...bars.map((b) => Number(b.low))) : lo;
+  const bHigh = bars.length ? Math.max(...bars.map((b) => Number(b.high))) : hi;
+  const mid = (bLow + bHigh) / 2;
+  let half = Math.max((bHigh - bLow) * 1.6, (hi - lo) * 0.45, 1);
+  // keep the box edges in view when they are close to the action
+  if (Math.abs(lo - mid) < half * 1.8) half = Math.max(half, Math.abs(lo - mid) * 1.15);
+  if (Math.abs(hi - mid) < half * 1.8) half = Math.max(half, Math.abs(hi - mid) * 1.15);
+  const vMin = mid - half, vMax = mid + half;
+  const W = 400, H = 176, L = 10, R = 74, T = 12, B = 26;
+  const y = (p: number) => T + (1 - (p - vMin) / (vMax - vMin)) * (H - T - B);
+  const yc = (p: number) => Math.max(T, Math.min(H - B, y(p)));
+  const secs = Array.from({ length: Math.max(1, tap.end - tap.start) }, (_, i) => tap.start + i);
+  const cw = (W - L - R) / secs.length;
+  const touches = (b: { low: bigint; high: bigint }) => Number(b.high) >= lo && Number(b.low) <= hi - 1;
+  const hitSec = bars.find(touches)?.sec ?? null;
+  const priceTag = (v: number) => `$${(v / 1e8).toFixed(Math.max(decimals, 2))}`;
   const explorer = `https://explorer.solana.com/address/${playerPda(owner).toBase58()}?cluster=custom&customUrl=${encodeURIComponent(ER_RPC)}`;
   const verdict = outcome === "win"
     ? `The price traded between ${evidence?.low != null ? px(evidence.low) : "?"} and ${evidence?.high != null ? px(evidence.high) : "?"} in this window, which reaches your box, so the house paid ${usd(result.payout)} (${(tap.multBps / 1e4).toFixed(2)}x).`
@@ -552,15 +564,31 @@ export function ProofModal({ result, symbol, decimals, owner, onClose }: {
         <p className={`verdict ${outcome === "win" ? "win" : outcome === "lose" ? "loss" : ""}`}>
           {outcome === "win" ? "Won" : outcome === "lose" ? "Lost" : "Refunded"} · {usd(tap.stake)} at {(tap.multBps / 1e4).toFixed(2)}x
         </p>
-        <svg viewBox={`0 0 ${W} ${H}`} className="proofchart" role="img" aria-label="Your box against the recorded price range">
-          <rect x={L} y={y(hi)} width={W - L - R} height={Math.max(2, y(lo) - y(hi))} className="pbox" />
-          {bars.map((b) => {
-            const x = L + (b.sec - tap.start + 0.5) * cw;
-            return <g key={b.sec}>
-              <line x1={x} x2={x} y1={y(Number(b.high))} y2={y(Number(b.low))} className="pbar" />
-              <line x1={x - 6} x2={x + 6} y1={y(Number(b.high))} y2={y(Number(b.high))} className="pbar" />
-              <line x1={x - 6} x2={x + 6} y1={y(Number(b.low))} y2={y(Number(b.low))} className="pbar" />
-            </g>;
+        <svg viewBox={`0 0 ${W} ${H}`} className="proofchart" role="img" aria-label="Your box against the price recorded each second of its window">
+          {/* your box: a band, clipped to the view */}
+          <rect x={L} y={yc(hi)} width={W - L - R} height={Math.max(2, yc(lo) - yc(hi))} className="pbox" />
+          {y(hi) >= T && <line x1={L} x2={W - R} y1={y(hi)} y2={y(hi)} className="pedge" />}
+          {y(lo) <= H - B && <line x1={L} x2={W - R} y1={y(lo)} y2={y(lo)} className="pedge" />}
+          <text x={W - R + 8} y={Math.min(H - B - 4, Math.max(T + 10, (yc(hi) + yc(lo)) / 2 + 4))} className="plabel strong">your box</text>
+          {y(hi) >= T + 8 && <text x={W - R + 8} y={y(hi) + 4} className="plabel">{priceTag(hi)}</text>}
+          {y(lo) <= H - B - 8 && <text x={W - R + 8} y={y(lo) + 4} className="plabel">{priceTag(lo)}</text>}
+          {/* one bar per second: the high-low the program recorded */}
+          {secs.map((sec, i) => {
+            const x = L + (i + 0.5) * cw;
+            const bar = bars.find((b) => b.sec === sec);
+            const t = new Date(sec * 1000);
+            return (
+              <g key={sec}>
+                <line x1={L + i * cw} x2={L + i * cw} y1={T} y2={H - B} className="pgrid" />
+                {bar ? (() => {
+                  const top = y(Number(bar.high)), bottom = y(Number(bar.low));
+                  const c = (top + bottom) / 2, h = Math.max(8, bottom - top);
+                  return <line x1={x} x2={x} y1={c - h / 2} y2={c + h / 2} className={`pbar${touches(bar) ? " hit" : ""}`} />;
+                })() : <text x={x} y={(T + H - B) / 2 + 4} className="plabel mid">{hitSec !== null && sec > hitSec ? "settled" : "no data"}</text>}
+                {sec === hitSec && <text x={x} y={T + 10} className="plabel hitlbl">hit</text>}
+                <text x={x} y={H - 8} className="plabel mid">:{String(t.getSeconds()).padStart(2, "0")}</text>
+              </g>
+            );
           })}
         </svg>
         <dl className="proofgrid">
