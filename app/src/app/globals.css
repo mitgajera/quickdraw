@@ -73,9 +73,9 @@ a.btn { text-decoration: none; display: inline-block; }
 }
 .px { font-size: 46px; font-weight: 500; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; line-height: 1.05; margin-top: 4px; }
 .chg { font-family: var(--font-mono), monospace; font-size: 13px; padding-bottom: 9px; }
-.hint { margin-left: auto; max-width: 300px; font-size: 13px; line-height: 1.45; color: var(--mute); padding-bottom: 6px; text-align: right; }
+.hint { margin-left: auto; max-width: 460px; font-size: 13px; line-height: 1.45; color: var(--mute); padding-bottom: 6px; text-align: right; }
 
-.body { display: grid; grid-template-columns: 1fr 290px; gap: 14px; }
+.body { display: grid; grid-template-columns: 1fr 290px; gap: 14px; align-items: start; }
 .boardwrap {
   position: relative; border: 1px solid var(--line); border-radius: var(--card-radius);
   overflow: hidden; background: var(--board);
@@ -253,3 +253,14 @@ a.badge { text-decoration: none; color: inherit; }
   .connect-top .btn { padding: 8px 9px; }
   .onboard .row .btn { padding: 9px 11px; }
 }
+
+/* layout pass */
+.statline a { white-space: nowrap; }
+.chg .lbl { margin-left: 4px; text-transform: none; }
+/* signed-out / setup card: side column on desktop, sheet above the dock on phones */
+.side-onboard .onboard { width: 100%; box-shadow: none; backdrop-filter: none; background: var(--panel); border-color: var(--accent); }
+.side-onboard .onboard h2 { font-size: 22px; }
+.side-onboard .row { flex-wrap: wrap; }
+@media (min-width: 901px) { .boardwrap .overlay { display: none; } }
+@media (max-width: 900px) { .side-onboard { display: none; } }
+@media (max-width: 600px) { .toast { bottom: 164px; } }

@@ -78,10 +78,11 @@ export function Game() {
   const [latency, setLatency] = useState<number | null>(null);
   const [lastSig, setLastSig] = useState<string | null>(null);
   const [flash, setFlash] = useState(false);
-  const firstPrice = useRef<{ symbol: Symbol; p: number } | null>(null);
+
   const price = model.price === null ? null : Number(model.price) / 1e8;
-  if (price !== null && firstPrice.current?.symbol !== symbol) firstPrice.current = { symbol, p: price };
-  const change = price !== null && firstPrice.current ? ((price - firstPrice.current.p) / firstPrice.current.p) * 100 : 0;
+  // change over the last minute of on-chain prices
+  const minuteAgo = model.hist.find((h) => h.t >= Date.now() / 1000 - model.clockOffset - 60);
+  const change = price !== null && minuteAgo ? ((price - minuteAgo.p) / minuteAgo.p) * 100 : 0;
 
   const player = model.player;
   const openTaps = player?.taps.filter((t) => t.open).length ?? 0;
@@ -175,6 +176,16 @@ export function Game() {
   useEffect(() => { if (account.error && account.stage === "ready") say(account.error, true); }, [account.error, account.stage, say]);
 
   const { login } = auth;
+  const showOnboarding = account.stage !== "ready" || account.walletUsdc === 0n;
+  const onboarding = (
+    <Onboarding
+      stage={account.stage} busy={account.busy} error={account.error} ready={auth.ready} authenticated={auth.authenticated}
+      address={signer?.publicKey.toBase58() ?? null} onSignIn={signIn} onActivate={account.activate}
+      walletError={auth.walletError} onRetryWallet={auth.retryWallet} onSignOut={signOut}
+      onHow={() => setHowOpen(true)} walletEmpty={account.walletUsdc === 0n} onRefresh={() => void account.refreshWallet()}
+    />
+  );
+
   const onBlocked = useCallback(() => {
     if (account.stage === "disconnected") { say("Sign in to tap"); login(); }
     else if (account.stage === "ready") say("Paused while the game server catches up with prices");
@@ -234,7 +245,7 @@ export function Game() {
           <div className="px">{price === null ? "—" : price.toFixed(DECIMALS[symbol])}</div>
         </div>
         <div className="chg" style={{ color: change >= 0 ? "var(--win)" : "var(--loss)" }}>
-          {change >= 0 ? "+" : ""}{change.toFixed(3)}%
+          {change >= 0 ? "+" : ""}{change.toFixed(3)}% <span className="lbl">1m</span>
         </div>
         <div className="hint">
           <p>Tap a box. If the price touches it before its column closes, you win the multiplier.</p>
@@ -258,16 +269,12 @@ export function Game() {
               <span className="lbl">Hit</span><b>+{banner.amount}</b><span className="mono">{banner.mult}</span>
             </div>
           )}
-          {(account.stage !== "ready" || account.walletUsdc === 0n) && (
-            <Onboarding
-              stage={account.stage} busy={account.busy} error={account.error} ready={auth.ready} authenticated={auth.authenticated}
-              address={signer?.publicKey.toBase58() ?? null} onSignIn={signIn} onActivate={account.activate}
-              walletError={auth.walletError} onRetryWallet={auth.retryWallet} onSignOut={signOut}
-              onHow={() => setHowOpen(true)} walletEmpty={account.walletUsdc === 0n} onRefresh={() => void account.refreshWallet()}
-            />
-          )}
+          {/* phones: a sheet above the stake dock */}
+          {showOnboarding && <div className="overlay">{onboarding}</div>}
         </div>
         <aside className="side">
+          {/* desktop: first card in the side column, so the board stays clear */}
+          {showOnboarding && <div className="side-onboard">{onboarding}</div>}
           {player && <Positions model={model} onProof={setProof} />}
           <div className="card">
             <div className="card-h"><span>Live taps</span><span>{model.online} trading</span></div>
@@ -399,8 +406,8 @@ function Onboarding(props: {
   const { stage, busy, error, address } = props;
   const needsUsdc = stage === "ready" && props.walletEmpty;
   return (
-    <div className="overlay">
-      <div className="onboard">
+    <div className="onboard">
+      <div>
         {!props.authenticated && (
           <>
             <h2>Fastest tap wins.</h2>
