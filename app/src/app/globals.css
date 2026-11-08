@@ -233,3 +233,11 @@ a.btn { text-decoration: none; display: inline-block; }
 .statline a { color: var(--accent); text-decoration: none; }
 .statline a:hover { text-decoration: underline; }
 a.badge { text-decoration: none; color: inherit; }
+
+/* how it works */
+.iconbtn .q { font-family: var(--font-mono), monospace; font-weight: 600; font-size: 14px; }
+.modal.how { width: min(560px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; }
+.howlist { list-style: none; counter-reset: how; display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
+.howlist li { counter-increment: how; position: relative; padding-left: 30px; font-size: 13.5px; line-height: 1.5; color: var(--mute); }
+.howlist li::before { content: "0" counter(how); position: absolute; left: 0; top: 1px; font-family: var(--font-mono), monospace; font-size: 11px; color: var(--accent); }
+.howlist b { color: var(--ink); font-weight: 600; }

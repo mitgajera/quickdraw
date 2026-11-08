@@ -6,6 +6,7 @@ import { ER_RPC, PROGRAM_ID, explainError, ix, playerPda, rowHeight, sendSigned,
 import type { PublicKey } from "@solana/web3.js";
 import { Board } from "./Board";
 import { LogoMark } from "./Logo";
+import { HowItWorks } from "./HowItWorks";
 import { NEEDS_USDC, useAccount, type Stage } from "@/lib/account";
 import { erBlockhash, er, prefs, sessionKey, type AppSigner } from "@/lib/chain";
 import { LiveModel, type Result } from "@/lib/live";
@@ -71,6 +72,7 @@ export function Game() {
   }), [model, say]);
 
   const [proof, setProof] = useState<Result | null>(null);
+  const [howOpen, setHowOpen] = useState(false);
   const [latency, setLatency] = useState<number | null>(null);
   const [lastSig, setLastSig] = useState<string | null>(null);
   const [flash, setFlash] = useState(false);
@@ -197,6 +199,9 @@ export function Game() {
             onClick={() => { sound.enabled = !soundOn; setSoundOn(!soundOn); }}>
             <SoundIcon on={soundOn} />
           </button>
+          <button className="iconbtn" aria-label="How it works" title="How it works" onClick={() => setHowOpen(true)}>
+            <span className="q">?</span>
+          </button>
           <button className="iconbtn" aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
             <ThemeIcon dark={theme === "dark"} />
@@ -245,6 +250,7 @@ export function Game() {
               stage={account.stage} busy={account.busy} error={account.error} ready={auth.ready} authenticated={auth.authenticated}
               address={signer?.publicKey.toBase58() ?? null} onSignIn={signIn} onActivate={account.activate}
               walletError={auth.walletError} onRetryWallet={auth.retryWallet} onSignOut={signOut}
+              onHow={() => setHowOpen(true)}
             />
           )}
         </div>
@@ -307,6 +313,7 @@ export function Game() {
       </footer>
 
       {toast && <div className={`toast${toast.bad ? " bad" : ""}`} role="status">{toast.text}</div>}
+      {howOpen && <HowItWorks book={model.book} onClose={() => setHowOpen(false)} />}
       {proof && signer && (
         <ProofModal result={proof} symbol={symbol} decimals={DECIMALS[symbol]} owner={signer.publicKey} onClose={() => setProof(null)} />
       )}
@@ -365,7 +372,7 @@ function WalletButton(props: {
 function Onboarding(props: {
   stage: Stage; busy: string | null; error: string | null; ready: boolean; authenticated: boolean;
   address: string | null; onSignIn: () => void; onActivate: () => void;
-  walletError: string | null; onRetryWallet: () => void; onSignOut: () => void;
+  walletError: string | null; onRetryWallet: () => void; onSignOut: () => void; onHow: () => void;
 }) {
   const { stage, busy, error, address } = props;
   const needsUsdc = error === NEEDS_USDC;
@@ -381,6 +388,7 @@ function Onboarding(props: {
             </p>
             <div className="row">
               <button className="btn primary" disabled={!props.ready} onClick={props.onSignIn}>{props.ready ? "Sign in with Google or X" : "Loading…"}</button>
+              <button className="btn" onClick={props.onHow}>How it works</button>
             </div>
           </>
         )}
