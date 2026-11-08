@@ -11,6 +11,7 @@ import { useAccount, type Stage } from "@/lib/account";
 import { erBlockhash, er, prefs, sessionKey, type AppSigner } from "@/lib/chain";
 import { LiveModel, type Result } from "@/lib/live";
 import { usePrivySigner } from "@/lib/privy";
+import { useTickers } from "@/lib/tickers";
 import { sound } from "@/lib/sound";
 
 const SYMBOLS: Symbol[] = ["SOL", "BTC", "ETH"];
@@ -76,6 +77,21 @@ export function Game() {
 
   const [proof, setProof] = useState<Result | null>(null);
   const [howOpen, setHowOpen] = useState(false);
+  const tickers = useTickers();
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (e.metaKey || e.ctrlKey || e.altKey || (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable))) return;
+      const k = e.key.toLowerCase();
+      const i = ["1", "2", "3", "4"].indexOf(k);
+      if (i >= 0) { const s = STAKES[i]!; setStake(s); prefs.setStake(s); say(`Stake $${s < 1 ? s.toFixed(2) : s}`); return; }
+      const m = ({ s: "SOL", b: "BTC", e: "ETH" } as Record<string, Symbol>)[k];
+      if (m) { setSymbol(m); return; }
+      if (e.key === "?") setHowOpen((o) => !o);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [say]);
   const [tab, setTab] = useState<Tab>("live");
   useEffect(() => { setTab(signer ? "you" : "live"); }, [signer]);
   const [latency, setLatency] = useState<number | null>(null);
@@ -224,7 +240,15 @@ export function Game() {
         <a className="brand" href="/" aria-label="Quickdraw home"><LogoMark size={28} /><span className="word">Quickdraw</span></a>
         <nav className="seg" aria-label="Markets">
           {SYMBOLS.map((s) => (
-            <button key={s} aria-pressed={s === symbol} onClick={() => setSymbol(s)}>{s}</button>
+            <button key={s} aria-pressed={s === symbol} onClick={() => setSymbol(s)} title={`${s}/USD · press ${s[0]}`}>
+              <span>{s}</span>
+              {tickers[s] && (
+                <span className="tick">
+                  {tickers[s]!.price.toFixed(s === "BTC" ? 0 : s === "ETH" ? 1 : 2)}
+                  {tickers[s]!.change !== null && <i className={tickers[s]!.change! >= 0 ? "up" : "down"}>{tickers[s]!.change! >= 0 ? "▲" : "▼"}</i>}
+                </span>
+              )}
+            </button>
           ))}
         </nav>
         <div className="right">

@@ -50,6 +50,7 @@ export function HowItWorks({ book, onClose }: { book: Book | null; onClose: () =
             a limit show struck through.
           </li>
         </ol>
+        <p className="keys"><kbd>1</kbd>–<kbd>4</kbd> stake · <kbd>S</kbd> <kbd>B</kbd> <kbd>E</kbd> market · <kbd>?</kbd> this help</p>
         <div className="row">
           <a className="btn" href={`https://explorer.solana.com/address/${PROGRAM_ID.toBase58()}?cluster=devnet`} target="_blank" rel="noreferrer">Program on Solana ↗</a>
           <a className="btn" href="https://github.com/mitgajera/quickdraw" target="_blank" rel="noreferrer">Source ↗</a>
