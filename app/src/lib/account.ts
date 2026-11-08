@@ -87,7 +87,7 @@ export function useAccount(signer: AppSigner | null) {
   // the wallet is the balance: keep it live (stakes leave and winnings arrive on Solana)
   useEffect(() => {
     if (!signer) return;
-    const id = setInterval(() => { if (!document.hidden) void readWallet().catch(() => {}); }, 1500);
+    const id = setInterval(() => { if (!document.hidden) void readWallet().catch(() => {}); }, 3000);
     return () => clearInterval(id);
   }, [signer, readWallet]);
 

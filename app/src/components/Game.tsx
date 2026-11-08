@@ -394,6 +394,7 @@ function WalletButton(props: {
         <div className="card menu">
           <p className="lbl">{props.name ?? "Your Solana wallet"}</p>
           <CopyAddress address={address} />
+          <a className="btn" href="/profile">Profile, deposit &amp; withdraw</a>
           <p className="lbl">{usd(walletUsdc)} devnet USDC · always in your wallet</p>
           {canManage && props.legacyBalance > 0n && (
             <button className="btn" onClick={act(props.onWithdrawLegacy)}>Move old game balance ({usd(props.legacyBalance)}) to wallet</button>
