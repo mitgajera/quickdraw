@@ -7,6 +7,8 @@
     "start": "tsx src/index.ts",
     "bootstrap": "tsx src/setup.ts",
     "e2e": "tsx src/e2e.ts",
+    "topup": "tsx src/topup.ts",
+    "bots:setup": "tsx src/bots.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
