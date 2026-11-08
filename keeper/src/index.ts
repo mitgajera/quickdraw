@@ -1,10 +1,11 @@
 // Quickdraw keeper: records oracle ticks into each market's candle ring on the ER and settles taps
-// the moment the candles decide them. Also tops up new player wallets with a little devnet SOL.
+// the moment the candles decide them. Also welcomes new player wallets with devnet SOL for fees and a
+// little starter USDC, so a player who signs in with Google or X can tap straight away.
 import http from "node:http";
 import { ComputeBudgetProgram, Connection, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction, type Keypair } from "@solana/web3.js";
 import {
-  PLAYER_SIZE, PROGRAM_ID, SETTLE_TIMEOUT_SECS, decodeCandles, decodePlayer, explainError, ix, judge,
-  marketKeys, parseEvents, sendWithKeypairs, type Candles, type MarketKeys,
+  PLAYER_SIZE, PROGRAM_ID, SETTLE_TIMEOUT_SECS, ataOf, createAtaIdempotent, decodeCandles, decodePlayer, explainError, ix, judge,
+  marketKeys, parseEvents, playerPda, sendWithKeypairs, transferTokens, type Candles, type MarketKeys,
 } from "@quickdraw/sdk";
 import { botKeypairs, config, keeperKeypair } from "./config";
 import { startCrowd } from "./crowd";
@@ -19,7 +20,7 @@ const stats = {
   startedAt: new Date().toISOString(),
   ticks: 0, tickErrors: 0, lastTickMs: 0,
   settles: 0, settleErrors: 0, wins: 0, losses: 0, voids: 0,
-  players: 0, openTaps: 0, sponsored: 0,
+  players: 0, openTaps: 0, sponsored: 0, welcomed: 0, welcomeUsdc: 0,
 };
 const log = (...a: unknown[]) => console.log(new Date().toISOString().slice(11, 23), ...a);
 
@@ -121,20 +122,48 @@ function settleLoop() {
   }, config.settleMs);
 }
 
-// ---------- devnet SOL top-ups for new player wallets ----------
-const sponsored = new Set<string>();
+// ---------- welcome grants for new player wallets ----------
+// Devnet SOL for base-layer fees and rent, plus a little starter USDC from the keeper's own wallet,
+// once per wallet and only while the grant budget lasts. A wallet that already has a game account or
+// its own USDC gets the SOL top-up only.
+const welcomed = new Set<string>();
+let welcomeSpent = 0n;
 
-async function sponsor(target: PublicKey) {
+async function welcome(target: PublicKey) {
   const key = target.toBase58();
-  if (sponsored.has(key)) return { ok: false, reason: "already sponsored" };
-  const balance = await base.getBalance(target);
-  if (balance >= config.sponsorLamports / 2) return { ok: true, reason: "has enough SOL", lamports: balance };
-  sponsored.add(key);
-  const tx = new Transaction().add(SystemProgram.transfer({ fromPubkey: keeper.publicKey, toPubkey: target, lamports: config.sponsorLamports }));
-  const r = await sendWithKeypairs(base, tx.instructions, [keeper], { pollMs: 400 });
-  stats.sponsored++;
-  log(`sponsored ${key.slice(0, 6)} with ${config.sponsorLamports / LAMPORTS_PER_SOL} SOL`);
-  return { ok: true, signature: r.signature };
+  if (welcomed.has(key)) return { ok: true, reason: "already welcomed", usdc: 0 };
+  welcomed.add(key);
+  try {
+    const [lamports, player, usdc, keeperUsdc] = await Promise.all([
+      base.getBalance(target),
+      base.getAccountInfo(playerPda(target)),
+      base.getTokenAccountBalance(ataOf(target)).then((r) => BigInt(r.value.amount)).catch(() => 0n),
+      base.getTokenAccountBalance(ataOf(keeper.publicKey)).then((r) => BigInt(r.value.amount)).catch(() => 0n),
+    ]);
+    const ixs = [];
+    if (lamports < config.sponsorLamports / 2) {
+      ixs.push(SystemProgram.transfer({ fromPubkey: keeper.publicKey, toPubkey: target, lamports: config.sponsorLamports }));
+    }
+    const grant = !player && usdc === 0n && welcomeSpent + config.welcomeUsdc <= config.welcomeBudget && keeperUsdc >= config.welcomeUsdc
+      ? config.welcomeUsdc : 0n;
+    if (grant > 0n) ixs.push(createAtaIdempotent(keeper.publicKey, target), transferTokens(keeper.publicKey, target, grant));
+    if (!ixs.length) return { ok: true, reason: "nothing to send", usdc: 0 };
+    if (grant > 0n) welcomeSpent += grant;
+    const r = await sendWithKeypairs(base, ixs, [keeper], { pollMs: 400 }).catch((e) => { welcomeSpent -= grant; throw e; });
+    if (lamports < config.sponsorLamports / 2) stats.sponsored++;
+    if (grant > 0n) { stats.welcomed++; stats.welcomeUsdc = Number(welcomeSpent) / 1e6; }
+    log(`welcomed ${key.slice(0, 6)}: ${lamports < config.sponsorLamports / 2 ? `${config.sponsorLamports / LAMPORTS_PER_SOL} SOL` : "no SOL"}, ${Number(grant) / 1e6} USDC`);
+    return { ok: true, signature: r.signature, usdc: Number(grant) / 1e6 };
+  } catch (e) {
+    welcomed.delete(key);
+    throw e;
+  }
+}
+
+async function readWallet(req: http.IncomingMessage) {
+  let body = "";
+  for await (const chunk of req) { body += chunk; if (body.length > 512) break; }
+  return new PublicKey((JSON.parse(body) as { wallet?: string }).wallet ?? "");
 }
 
 function serve() {
@@ -148,18 +177,16 @@ function serve() {
       if (url.pathname === "/health") { res.end(JSON.stringify({ ...stats, markets: config.markets, bots: bots.length })); return; }
       // demo crowd wallets, so the app can label them honestly
       if (url.pathname === "/bots") { res.end(JSON.stringify(bots.map((b) => b.publicKey.toBase58()))); return; }
-      if (url.pathname === "/sponsor" && req.method === "POST") {
-        let body = "";
-        for await (const chunk of req) { body += chunk; if (body.length > 512) break; }
-        const { wallet } = JSON.parse(body) as { wallet?: string };
-        res.end(JSON.stringify(await sponsor(new PublicKey(wallet ?? ""))));
+      // "/sponsor" is the old name, kept for app builds that still call it
+      if ((url.pathname === "/welcome" || url.pathname === "/sponsor") && req.method === "POST") {
+        res.end(JSON.stringify(await welcome(await readWallet(req))));
         return;
       }
       res.statusCode = 404; res.end(JSON.stringify({ error: "not found" }));
     } catch (e) {
       res.statusCode = 400; res.end(JSON.stringify({ error: explainError(e) }));
     }
-  }).listen(config.port, () => log(`http on :${config.port} (/health, POST /sponsor)`));
+  }).listen(config.port, () => log(`http on :${config.port} (/health, /bots, POST /welcome)`));
 }
 
 // ---------- start ----------

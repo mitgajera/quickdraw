@@ -19,6 +19,10 @@ export const config = {
   port: Number(env("PORT", "8787")),
   /** Devnet SOL sent to a new player wallet that has none, for base-layer fees and rent. */
   sponsorLamports: Number(env("SPONSOR_LAMPORTS", String(30_000_000))),
+  /** Starter devnet USDC (6 decimals) sent from the keeper's wallet to each new player wallet. */
+  welcomeUsdc: BigInt(env("WELCOME_USDC", "1000000")),
+  /** Total starter USDC this keeper process will hand out before it stops granting. */
+  welcomeBudget: BigInt(env("WELCOME_BUDGET", "15000000")),
 };
 
 const parseSecret = (json: string) => Keypair.fromSecretKey(Uint8Array.from(JSON.parse(json) as number[]));
