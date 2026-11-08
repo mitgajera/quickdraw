@@ -105,6 +105,18 @@ export function Game() {
 
   const player = model.player;
   const openTaps = player?.taps.filter((t) => t.open).length ?? 0;
+  // responsible play: P&L since this page opened, against the limit set on the profile
+  const sessionStart = useRef<{ owner: string; pnl: bigint } | null>(null);
+  if (player && sessionStart.current?.owner !== player.owner.toBase58()) sessionStart.current = { owner: player.owner.toBase58(), pnl: player.pnl };
+  const [lossLimit, setLossLimit] = useState(0);
+  useEffect(() => {
+    const read = () => setLossLimit(prefs.lossLimit());
+    read();
+    window.addEventListener("focus", read);
+    return () => window.removeEventListener("focus", read);
+  }, []);
+  const sessionLoss = player && sessionStart.current ? Number(sessionStart.current.pnl - player.pnl) / 1e6 : 0;
+  const limitHit = lossLimit > 0 && sessionLoss >= lossLimit;
   // the wallet is the balance; stakes still on their way to the house count as spent
   const inFlight = (player?.taps ?? [])
     .filter((t) => t.open && (t.id & WALLET_TAP_FLAG) !== 0 && !account.collected.has(t.id))
@@ -116,6 +128,7 @@ export function Game() {
     const session = sessionKey(signer.publicKey, false);
     if (!session) return;
     const amount = BigInt(Math.round(stake * 1e6));
+    if (limitHit) { say(`Session loss limit reached ($${lossLimit}). Take a break, or change it on your profile.`, true); return; }
     if (available < amount) { say(available === 0n ? "Add devnet USDC to your wallet to tap" : "Not enough USDC in your wallet for that stake", true); return; }
     sound.tap();
     if (navigator.vibrate) navigator.vibrate(8);
@@ -142,7 +155,7 @@ export function Game() {
       model.pending = model.pending.filter((p) => p.key !== key);
       say(explainError(e), true);
     }
-  }, [account.stage, signer, stake, available, model, say]);
+  }, [account.stage, signer, stake, available, model, say, limitHit, lossLimit]);
 
   // settle is permissionless: if the keeper has not settled one of our finished taps a couple of
   // seconds after it closed, settle it ourselves (free on the rollup, signed by the session key)
@@ -301,6 +314,9 @@ export function Game() {
           </div>
           <div className="boardwrap">
             <Board model={model} stake={stake} canTap={account.stage === "ready" && model.recording} onTap={onTap} onReject={onReject} onBlocked={onBlocked} />
+            {limitHit && account.stage === "ready" && (
+              <div className="notice" role="status">Session loss limit reached (${lossLimit}). Tapping is paused; <a href="/profile">change it</a> or come back later.</div>
+            )}
             {!model.recording && account.stage === "ready" && (
               <div className="notice" role="status">The game server is catching up with prices — tapping resumes in a few seconds.</div>
             )}

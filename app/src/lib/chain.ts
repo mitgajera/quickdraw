@@ -47,4 +47,7 @@ export const prefs = {
   setTheme: (t: "light" | "dark") => store.set("qd-theme", t),
   stake: () => Number(store.get("qd-stake") ?? 1),
   setStake: (s: number) => store.set("qd-stake", String(s)),
+  /** Responsible play: pause tapping once a session is down this many dollars (0 = off). */
+  lossLimit: () => Number(store.get("qd-loss-limit") ?? 0),
+  setLossLimit: (d: number) => store.set("qd-loss-limit", String(d)),
 };
