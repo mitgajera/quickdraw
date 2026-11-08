@@ -4,190 +4,206 @@
 
 # Quickdraw
 
-**Fastest tap wins.** Tap trading on Solana: tap the box the price will hit.
+### Fastest tap wins.
 
-[**Play on devnet**](https://quickdraw-beta.vercel.app) · [Program on Explorer](https://explorer.solana.com/address/7TBHSjenh1DFt7C8vnNVfXDLbZ3cCgEeAa4XcTUvF6Au?cluster=devnet) · [Keeper health](https://quickdraw-keeper.onrender.com/health)
+Tap the box the price will hit. Every tap is a real on-chain trade.
 
-Built for the [MLH x Solana Hackathon](https://events.mlh.com/events/15200-solana-hackathon), Nov 6–8, 2026
+[![Play on devnet](https://img.shields.io/badge/play-quickdraw--beta.vercel.app-3DD68C?style=for-the-badge)](https://quickdraw-beta.vercel.app)
+
+![Solana](https://img.shields.io/badge/Solana-devnet-9945FF?logo=solana&logoColor=white)
+![Anchor](https://img.shields.io/badge/Anchor-1.2-blue)
+![MagicBlock](https://img.shields.io/badge/MagicBlock-ephemeral%20rollup-black)
+![Pyth](https://img.shields.io/badge/Pyth-Lazer-6E4BFF)
+![USDC](https://img.shields.io/badge/USDC-devnet-2775CA)
+![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=nextdotjs)
+
+[Live app](https://quickdraw-beta.vercel.app) · [Program](https://explorer.solana.com/address/7TBHSjenh1DFt7C8vnNVfXDLbZ3cCgEeAa4XcTUvF6Au?cluster=devnet) · [Keeper status](https://quickdraw-keeper.onrender.com/health)
 
 </div>
 
 ---
 
-A live SOL, BTC or ETH price becomes a grid. Rows are price bands, columns are 4-second windows. Tap a box. If the price trades inside it during that window, you win the box's multiplier, paid straight to your wallet.
+## The game
 
-Every tap is a real on-chain trade in USDC. The program prices it and settles it from on-chain oracle data, on a MagicBlock ephemeral rollup, in about 150–250 ms.
+```
+          4s      8s      12s     16s
+        ┌───────┬───────┬───────┬───────┐
+ 89.42  │  27x  │  20x  │  17x  │  15x  │
+ 89.41  │  3.3x │  3.4x │  3.5x │  3.6x │
+ 89.40 ─┼─ 1.4x ┼─ 1.5x ┼─ 1.5x ┼─ 1.5x ┼──  ← live price
+ 89.39  │  3.5x │  3.6x │  3.6x │  3.7x │
+ 89.38  │  30x  │  23x  │  19x  │  16x  │
+        └───────┴───────┴───────┴───────┘
+```
+
+- **Rows** are price bands, **columns** are 4-second windows.
+- **Tap a box.** If the price trades inside it during its window, you win its multiplier.
+- **Near boxes** pay ~1.4x. **Far boxes** pay up to 50x. One box per column.
+- **Wins pay instantly** when the price touches. Losses settle when the column closes.
 
 ## Why it's different
 
-| | Typical tap-trading game | Quickdraw |
+| | Typical tap-trading game | **Quickdraw** |
 |---|---|---|
-| **Odds** | Set off-chain, edge unpublished | Computed by the program on every tap; edge and limits are public |
-| **Results** | Taken on trust | Settled from an on-chain price record, with a proof for every tap |
-| **Money** | Deposit into the game first | No deposit. USDC stays in your wallet; each tap pulls only its stake |
-| **Onboarding** | Wallet app, seed phrase, gas | Sign in with Google or X. No popups, no gas, no SOL needed |
-| **Speed** | Seconds per on-chain trade | ~150–250 ms on a MagicBlock rollup |
+| Odds | Set off-chain, edge hidden | **Priced by the program on every tap** |
+| Results | Taken on trust | **Settled from an on-chain price record** |
+| Money | Deposit first | **No deposit.** USDC stays in your wallet |
+| Onboarding | Wallet app, seed phrase, gas | **Google or X sign-in.** No popups, no gas |
+| Speed | Seconds per trade | **~150 ms** on a MagicBlock rollup |
 
-## How it plays
+## Features
 
-1. **Sign in** with Google or X. Privy creates an embedded Solana wallet; the house covers network fees and sends a little starter devnet USDC.
-2. **Pick a stake** ($0.50–$5) and a market (SOL, BTC, ETH).
-3. **Tap a box.** Near boxes pay ~1.4x; far ones pay up to 50x. One box per column.
-4. **Watch it land.** A win pays the moment the price touches your box; a loss settles when its column closes.
-5. **Check it.** Open any result to see its window's recorded price range drawn against your box, then share wins to X.
-
-Also in the app: a live feed of everyone's taps, a leaderboard, the house pool's state, a profile with P&L, receipts and achievements, a session loss limit, a light theme, sound, and keyboard shortcuts (`1`–`4` stakes, `S` `B` `E` markets, `?` help).
+| | |
+|---|---|
+| ⚡ **Instant taps** | ~150–250 ms confirmations on a MagicBlock ephemeral rollup |
+| 🔑 **Social sign-in** | Privy embedded wallet from Google or X; the house pays every fee |
+| 💸 **Wallet play** | Stakes leave your wallet only when you tap; wins land straight back |
+| 🎯 **On-chain odds** | Priced from live volatility; you never get less than the multiplier you saw |
+| 🔍 **Proof per tap** | The window's recorded price range drawn against your box, with explorer links |
+| 📈 **3 markets** | SOL, BTC, ETH from Pyth Lazer |
+| 👥 **Multiplayer** | Live feed of every tap, leaderboard, house pool stats |
+| 🏆 **Profile** | P&L, receipts, achievements, session loss limit, shareable win cards |
+| ⌨️ **Keyboard** | `1`–`4` stake · `S` `B` `E` market · `?` help |
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  subgraph Browser["Browser (Next.js)"]
-    P[Privy wallet<br/>Google / X]
-    S[Session key<br/>can only tap]
+  subgraph Browser
+    P[Privy wallet]
+    S[Session key]
   end
-  subgraph ER["MagicBlock ephemeral rollup"]
-    T[place_wallet_tap<br/>prices the box]
-    C[(Candle ring<br/>1s high/low)]
+  subgraph ER[MagicBlock rollup]
+    T[place_wallet_tap]
+    C[(Candle ring)]
     W[settle_wallet]
   end
-  subgraph Solana["Solana devnet"]
-    V[(House vault<br/>USDC + LP shares)]
-    L[(Ledger)]
-    U[(Player USDC<br/>wallet)]
+  subgraph Solana[Solana devnet]
+    U[(Your USDC)]
+    V[(House vault)]
   end
-  O[Pyth Lazer via<br/>MagicBlock oracle] -->|record_tick, 8×/s| C
-  K[Keeper] -.cranks.-> C
-  K -.cranks.-> W
+  O[Pyth Lazer] -->|record_tick 8×/s| C
   S -->|tap ~150 ms| T
   T -->|Magic Action: collect_stake| U
   U -->|stake| V
   C --> W
   W -->|Magic Action: pay_out| V
   V -->|payout| U
-  T --> L
 ```
 
-- **One Anchor program** runs on both layers. Player accounts, the house book and per-market candle rings are delegated to the rollup; the vault, the ledger and every USDC balance stay on Solana.
-- **Prices:** the keeper cranks `record_tick`, which reads the Pyth Lazer feed through MagicBlock's oracle *on-chain* into a per-second high/low ring. The keeper cannot write a price of its own.
-- **Settlement is permissionless:** anyone can call `settle_wallet`. The keeper does it, and so does the player's own browser.
+| Piece | Role |
+|---|---|
+| **Anchor program** | One program on both layers: markets, odds, taps, settlement, house book |
+| **Rollup** | Player accounts, house book and per-second candle rings live here for speed |
+| **Solana** | Vault, ledger and every USDC balance stay on the base layer |
+| **Keeper** | Cranks `record_tick` (reads the oracle on-chain; can't invent a price) and settles taps |
+| **Settlement** | Permissionless: the keeper or the player's own browser can call it |
 
 ## How money moves
 
-Wallet play means there is no deposit and no cash-out step: **your balance is your wallet.**
+| Step | Where | What happens |
+|---|---|---|
+| **1. Sign in** | Solana | Wallet approves the vault to spend USDC (nothing moves), opens a ledger, delegates the player to the rollup |
+| **2. Tap** | Rollup, ~150 ms | Checks live balance and allowance, prices the box, schedules `collect_stake` |
+| **3. Stake** | Solana, ~1 s later | Magic Action moves just that stake from the wallet to the vault |
+| **4. Settle** | Rollup | Judged from the candle ring; a win schedules `pay_out` |
+| **5. Payout** | Solana | Magic Action sends the payout straight to the wallet |
 
-1. **Sign-in (Solana, one silent transaction).** The wallet approves the house vault PDA to spend its USDC with an SPL `approve`; nothing moves. The same transaction opens a `Ledger` and delegates the player account to the rollup.
-2. **Tap (rollup).** `place_wallet_tap` reads a live copy of the wallet's token account and checks balance and allowance against stakes still in flight. It prices the box, records the tap, and schedules a **Magic Action**: `collect_stake` runs on Solana about a second later, moving just that stake to the vault and marking it in the ledger.
-3. **Settle (rollup).** `settle_wallet` judges taps from the candle ring. A win pays only once the ledger shows its stake collected, through a second Magic Action, `pay_out`, straight to the wallet. A stake that never arrives voids its tap after 30 s.
-
-`collect_stake` and `pay_out` move value, so they accept only calls from the delegation program carrying the escrow signature of the program's own `escrow-auth` PDA. Nobody else can trigger them.
+> `collect_stake` and `pay_out` accept only calls signed by the program's own escrow PDA through the delegation program. Nobody else can trigger them. A stake that never arrives voids its tap after 30 s.
 
 ## Odds
 
-The program prices each box as the probability that the price **touches** that band during that window, then applies the house edge:
+| | |
+|---|---|
+| **Model** | Probability the price *touches* the band during the window |
+| **Movement** | Drift before the window + wander inside it, 12-point Gauss-Legendre |
+| **Volatility** | Last 30 s of the on-chain candle ring, with a per-market floor |
+| **Safety** | Prices a calm and a jumpy scenario, quotes the more likely one |
+| **Your price** | Pays at most the quoted multiplier; rejects the tap below your slippage floor |
+| **Backtest** | Return to player ≤ 95% in every multiplier bucket on recorded candles |
 
-- **Two phases of movement:** drift before the window opens, and the smaller wander inside it. The touch probability is integrated with 12-point Gauss-Legendre quadrature.
-- **Two volatility scenarios:** calm and jumpy. The program quotes the *more likely* of the two, so a quiet minute can't make far boxes underpriced.
-- **Volatility** comes from the last 30 s of the on-chain candle ring, with a per-market floor.
-- **You get what you saw:** the tap carries the multiplier you were shown and a slippage floor. The program pays at most the quoted multiplier, and rejects the tap if the live price drifted below your floor.
-
-The scales were fitted on recorded oracle data. In a backtest over recorded candles, return to player stayed at or below 95% in every multiplier bucket, so no row of the grid is a free lunch for players.
-
-**House book (live on devnet):** 10% edge · 1.1x–50x multipliers · $50 max profit per tap · open exposure capped at 50% of the pool. Boxes that would break a limit are shown struck through, so the grid never offers a trade the program would reject.
+**House book:** 10% edge · 1.1x–50x · $50 max profit per tap · open exposure ≤ 50% of the pool. Boxes over a limit are struck through, so the grid never offers a trade the program would reject.
 
 ## Tech stack
 
 | Layer | Stack |
 |---|---|
-| Program | Rust, Anchor 1.2, MagicBlock `ephemeral-rollups-sdk` 0.17 (delegation, Magic Actions), SPL Token |
-| Data | Pyth Lazer via MagicBlock's ephemeral oracle, Circle devnet USDC |
-| Client | TypeScript SDK sharing the program's odds math, `@solana/web3.js` |
-| App | Next.js 15, React 19, Privy (Google / X, embedded Solana wallets), canvas grid, Geist |
-| Keeper | Node 22, `tsx`, `jose` (Privy token checks), Docker on Render |
+| Program | Rust · Anchor 1.2 · MagicBlock `ephemeral-rollups-sdk` 0.17 · SPL Token |
+| Data | Pyth Lazer via MagicBlock oracle · Circle devnet USDC |
+| App | Next.js 15 · React 19 · Privy · canvas grid · Geist |
+| SDK | TypeScript · `@solana/web3.js` · odds math shared with the program |
+| Keeper | Node 22 · Docker on Render |
 
 ## Repository
 
-| Path | What |
-|---|---|
-| [`programs/quickdraw`](programs/quickdraw) | Anchor program: markets, candle ring, on-chain odds, taps, wallet play and Magic Actions, settlement, USDC house book with LP shares |
-| [`sdk`](sdk) | TypeScript client: PDAs, account decoders, IDL-driven instructions, the same odds math as the program |
-| [`keeper`](keeper) | Always-on service: records oracle ticks, settles taps, funds new players and the action escrow; setup and end-to-end scripts |
-| [`app`](app) | The Next.js game |
+```
+quickdraw/
+├── programs/quickdraw   Anchor program (odds, taps, settlement, Magic Actions, house book)
+├── sdk                  TypeScript client: PDAs, decoders, instructions, odds math
+├── keeper               Oracle ticks, settlement, player welcome, setup scripts
+└── app                  Next.js game
+```
 
-## Run it locally
+## Run locally
 
-Requires Node 22 and pnpm 10. The Solana / Anchor toolchain is only needed to build the program.
+Node 22 and pnpm 10. The Solana toolchain is only needed to build the program.
 
 ```bash
 pnpm install
 ```
 
-**App** (uses the deployed devnet program and keeper): create `app/.env.local` with
+`app/.env.local`:
 
 ```bash
 NEXT_PUBLIC_KEEPER_URL=https://quickdraw-keeper.onrender.com
-NEXT_PUBLIC_PRIVY_APP_ID=<your Privy app id>
-# optional: a dedicated devnet RPC such as Helius
-NEXT_PUBLIC_BASE_RPC=https://devnet.helius-rpc.com/?api-key=<key>
+NEXT_PUBLIC_PRIVY_APP_ID=<privy app id>
+NEXT_PUBLIC_BASE_RPC=<optional devnet RPC; falls back to public devnet>
 ```
 
-then `pnpm dev` and open http://localhost:3000.
-
-**Keeper:** `KEEPER_KEYPAIR=path/to/keypair.json pnpm keeper`. The keypair needs devnet SOL.
-
-**Program:**
-
-```bash
-anchor build
-cargo test -p quickdraw                                     # odds and settlement unit tests
-pnpm --filter @quickdraw/keeper e2e:wallet                  # full wallet-play loop on devnet
-```
+| Command | Does |
+|---|---|
+| `pnpm dev` | App on http://localhost:3000 against the live devnet program |
+| `KEEPER_KEYPAIR=key.json pnpm keeper` | Run your own keeper |
+| `anchor build` | Build the program |
+| `cargo test -p quickdraw` | Odds and settlement unit tests |
+| `pnpm --filter @quickdraw/keeper e2e:wallet` | Full wallet-play loop on devnet |
 
 ## Deploy
 
-**Keeper on Render.** A Docker web service from this repo (`keeper/Dockerfile`, or New → Blueprint with `render.yaml`). Environment variables:
+**Keeper → Render** (Docker, `keeper/Dockerfile` or `render.yaml`)
 
 | Variable | Purpose |
 |---|---|
-| `KEEPER_SECRET` | The keeper wallet's keypair JSON array |
-| `PRIVY_APP_ID` | Verifies Privy login tokens with Privy's public keys (no app secret needed) |
-| `BASE_RPC` | Optional dedicated devnet RPC |
-| `WELCOME_USDC` / `WELCOME_BUDGET` | Starter USDC per wallet ($1) and per process ($15) |
-| `WELCOME_SOL_BUDGET` / `WELCOME_PER_IP_HOUR` | Fee sponsorship budget (3 SOL) and per-IP limit (6/hour) |
-| `BOT_SECRETS` | Optional demo crowd (see below) |
+| `KEEPER_SECRET` | Keeper wallet keypair (JSON array) |
+| `PRIVY_APP_ID` | Verifies sign-ins with Privy's public keys |
+| `BASE_RPC` | Optional devnet RPC |
+| `WELCOME_USDC` · `WELCOME_BUDGET` | Starter USDC per wallet ($1) and per process ($15) |
+| `WELCOME_SOL_BUDGET` · `WELCOME_PER_IP_HOUR` | Fee budget (3 SOL) and per-IP limit (6/h) |
+| `BOT_SECRETS` | Optional house players (see below) |
 
-The free plan sleeps after about 15 minutes without inbound traffic, which stops ticks and settlement, so ping `/health` every few minutes (UptimeRobot works).
+**App → Vercel:** root directory `app`; set `NEXT_PUBLIC_KEEPER_URL` and `NEXT_PUBLIC_PRIVY_APP_ID`. In Privy, enable Google, Twitter and Solana embedded wallets, and allow the site's domain.
 
-**App on Vercel.** Import the repo with **Root Directory** `app`, and set `NEXT_PUBLIC_KEEPER_URL`, `NEXT_PUBLIC_PRIVY_APP_ID` and optionally `NEXT_PUBLIC_BASE_RPC`. In the Privy dashboard, enable Google and Twitter login and Solana embedded wallets, and add the site under allowed origins.
+**House players:** the house can run a few wallets that tap with small stakes so the market is never empty. They follow exactly the same rules and odds as everyone, and the keeper lists their addresses at [`/bots`](https://quickdraw-keeper.onrender.com/bots).
 
-**One-time devnet setup** (already done for the program above):
-
-```bash
-HOUSE_KEYPAIR=path/to/house.json MARKETS=SOL,BTC,ETH pnpm --filter @quickdraw/keeper bootstrap
-```
-
-### Demo crowd
-
-So a visitor never lands on an empty market, the keeper can run a few house wallets that tap every 20–90 s with small stakes. They play by exactly the same rules as everyone else: same pricing, same settlement, real devnet USDC. **The app labels them `demo·`** in the live feed and leaderboard. Set them up with `BOT_KEYPAIRS=a.json,b.json pnpm --filter @quickdraw/keeper bots:setup`, then pass the keys to the keeper as `BOT_SECRETS`.
-
-## Devnet addresses
+## Devnet
 
 | | |
 |---|---|
 | Program | `7TBHSjenh1DFt7C8vnNVfXDLbZ3cCgEeAa4XcTUvF6Au` |
-| USDC (Circle devnet) | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`. More is free at [faucet.circle.com](https://faucet.circle.com/) |
+| USDC | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` · free at [faucet.circle.com](https://faucet.circle.com/) |
 | Rollup | `devnet-as.magicblock.app` |
 
-## What's next
+## Roadmap
 
-- On-chain scheduled settlement with MagicBlock cranks instead of the keeper
-- An in-app screen for adding house liquidity (`lp_add` / `lp_remove` already work)
-- More markets, a security review, then mainnet
+- [ ] On-chain scheduled settlement with MagicBlock cranks
+- [ ] In-app liquidity screen (`lp_add` / `lp_remove` already work)
+- [ ] More markets
+- [ ] Security review → mainnet
 
 ---
 
 <div align="center">
 
-Devnet only. Not audited, not financial advice, and no real money involved.
+Built for the [MLH × Solana Hackathon](https://events.mlh.com/events/15200-solana-hackathon) · Devnet only, not audited, no real money
 
 </div>
