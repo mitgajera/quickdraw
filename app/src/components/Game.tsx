@@ -7,7 +7,7 @@ import type { PublicKey } from "@solana/web3.js";
 import { Board } from "./Board";
 import { LogoMark } from "./Logo";
 import { HowItWorks } from "./HowItWorks";
-import { NEEDS_USDC, useAccount, type Stage } from "@/lib/account";
+import { useAccount, type Stage } from "@/lib/account";
 import { erBlockhash, er, prefs, sessionKey, type AppSigner } from "@/lib/chain";
 import { LiveModel, type Result } from "@/lib/live";
 import { usePrivySigner } from "@/lib/privy";
@@ -15,7 +15,9 @@ import { sound } from "@/lib/sound";
 
 const SYMBOLS: Symbol[] = ["SOL", "BTC", "ETH"];
 const STAKES = [0.5, 1, 2, 5];
-const TAP_COMPUTE_UNITS = 400_000;
+// on-chain window pricing (~250k) plus scheduling the Magic Action that collects the stake
+const TAP_COMPUTE_UNITS = 600_000;
+const WALLET_TAP_FLAG = 0x8000_0000;
 const DECIMALS: Record<Symbol, number> = { SOL: 4, BTC: 1, ETH: 2 };
 const usd = (v: bigint | number) => {
   const n = typeof v === "bigint" ? Number(v) / 1e6 : v;
@@ -83,13 +85,18 @@ export function Game() {
 
   const player = model.player;
   const openTaps = player?.taps.filter((t) => t.open).length ?? 0;
+  // the wallet is the balance; stakes still on their way to the house count as spent
+  const inFlight = (player?.taps ?? [])
+    .filter((t) => t.open && (t.id & WALLET_TAP_FLAG) !== 0 && !account.collected.has(t.id))
+    .reduce((a, t) => a + t.stake, 0n);
+  const available = account.walletUsdc > inFlight ? account.walletUsdc - inFlight : 0n;
 
   const onTap = useCallback(async (bandIndex: bigint, column: number, zoom: number, multBps: number) => {
     if (account.stage !== "ready" || !signer) return;
     const session = sessionKey(signer.publicKey, false);
     if (!session) return;
     const amount = BigInt(Math.round(stake * 1e6));
-    if (!player || player.balance < amount) { say("Not enough balance for that stake", true); return; }
+    if (available < amount) { say(available === 0n ? "Add devnet USDC to your wallet to tap" : "Not enough USDC in your wallet for that stake", true); return; }
     sound.tap();
     if (navigator.vibrate) navigator.vibrate(8);
     const key = `${column}:${bandIndex}:${Date.now()}`;
@@ -97,7 +104,8 @@ export function Game() {
     model.pending.push({ key, lo, hi, column, stake: amount, multBps, at: Date.now() / 1000 });
     try {
       // on-chain window pricing needs ~250k compute units; rollup transactions are free
-      const tx = new Transaction().add(ComputeBudgetProgram.setComputeUnitLimit({ units: TAP_COMPUTE_UNITS }), ix.placeTap({
+      // the stake stays in the wallet until this tap's Magic Action collects it on Solana
+      const tx = new Transaction().add(ComputeBudgetProgram.setComputeUnitLimit({ units: TAP_COMPUTE_UNITS }), ix.placeWalletTap({
         signer: session.publicKey, owner: signer.publicKey, market: model.keys,
         bandIndex, column, zoom, stake: amount, minMultBps: Math.floor(multBps * 0.85),
       }));
@@ -114,7 +122,7 @@ export function Game() {
       model.pending = model.pending.filter((p) => p.key !== key);
       say(explainError(e), true);
     }
-  }, [account.stage, signer, stake, player, model, say]);
+  }, [account.stage, signer, stake, available, model, say]);
 
   // settle is permissionless: if the keeper has not settled one of our finished taps a couple of
   // seconds after it closed, settle it ourselves (free on the rollup, signed by the session key)
@@ -124,11 +132,14 @@ export function Game() {
     const id = setInterval(() => {
       const session = sessionKey(signer.publicKey, false);
       const now = Date.now() / 1000 - model.clockOffset;
-      const due = model.player?.taps.some((t) => t.open && t.market.equals(model.keys.market) && now > t.end + 2);
-      if (!session || !due || Date.now() - settling.current < 3000) return;
+      const due = model.player?.taps.filter((t) => t.open && t.market.equals(model.keys.market) && now > t.end + 2) ?? [];
+      if (!session || !due.length || Date.now() - settling.current < 3000) return;
       settling.current = Date.now();
+      const wallet = due.some((t) => (t.id & WALLET_TAP_FLAG) !== 0);
       void (async () => {
-        const tx = new Transaction().add(ix.settle(signer.publicKey, model.keys));
+        const tx = new Transaction().add(...(wallet
+          ? [ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }), ix.settleWallet(session.publicKey, signer.publicKey, model.keys)]
+          : [ix.settle(signer.publicKey, model.keys)]));
         tx.recentBlockhash = await erBlockhash();
         tx.feePayer = session.publicKey;
         tx.sign(session);
@@ -149,13 +160,12 @@ export function Game() {
   const signIn = () => auth.login();
   const signOut = async () => { await auth.logout(); };
 
-  // the embedded wallet signs silently, so a new account or an expired session sets itself up once per
-  // wallet and stage; a failure leaves a retry button on the card. "undelegated" is left to the player:
-  // it is where cash out ends, and auto-resuming would deposit the withdrawn USDC straight back
+  // the embedded wallet signs silently, so setup (an allowance, no deposit) and session renewal run by
+  // themselves once per wallet and stage; a failure leaves a retry button on the card
   const attempted = useRef("");
   useEffect(() => {
     const st = account.stage;
-    if (!signer || account.busy || !(st === "new" || st === "session")) return;
+    if (!signer || account.busy || !(st === "setup" || st === "session")) return;
     const key = `${signer.publicKey.toBase58()}:${st}`;
     if (attempted.current === key) return;
     attempted.current = key;
@@ -192,8 +202,10 @@ export function Game() {
                   title="Your last tap on the MagicBlock rollup: open it in the explorer">{inner}</a>
               : <div className={`badge${flash ? " flash" : ""}`} title="Time from tap to confirmation on the MagicBlock rollup">{inner}</div>;
           })()}
-          {player && (
-            <div className="bal"><span className="lbl">Balance</span><b>{usd(player.balance)}</b></div>
+          {signer && account.stage !== "checking" && (
+            <div className="bal" title="Devnet USDC in your wallet; stakes leave it when you tap, winnings land in it">
+              <span className="lbl">Wallet</span><b>{usd(available)}</b>
+            </div>
           )}
           <button className="iconbtn" aria-label={soundOn ? "Mute sounds" : "Unmute sounds"} aria-pressed={soundOn}
             onClick={() => { sound.enabled = !soundOn; setSoundOn(!soundOn); }}>
@@ -210,7 +222,8 @@ export function Game() {
             signer={signer} name={auth.name} ready={auth.ready} authenticated={auth.authenticated}
             walletError={auth.walletError} onRetryWallet={auth.retryWallet}
             busy={account.busy} walletUsdc={account.walletUsdc} canManage={account.stage === "ready"}
-            onSignIn={signIn} onSignOut={signOut} onCashOut={account.cashOut} onAddFunds={account.addFunds}
+            legacyBalance={account.legacyBalance} onWithdrawLegacy={account.withdrawLegacy}
+            onSignIn={signIn} onSignOut={signOut}
           />
         </div>
       </header>
@@ -245,12 +258,12 @@ export function Game() {
               <span className="lbl">Hit</span><b>+{banner.amount}</b><span className="mono">{banner.mult}</span>
             </div>
           )}
-          {account.stage !== "ready" && (
+          {(account.stage !== "ready" || account.walletUsdc === 0n) && (
             <Onboarding
               stage={account.stage} busy={account.busy} error={account.error} ready={auth.ready} authenticated={auth.authenticated}
               address={signer?.publicKey.toBase58() ?? null} onSignIn={signIn} onActivate={account.activate}
               walletError={auth.walletError} onRetryWallet={auth.retryWallet} onSignOut={signOut}
-              onHow={() => setHowOpen(true)}
+              onHow={() => setHowOpen(true)} walletEmpty={account.walletUsdc === 0n} onRefresh={() => void account.refreshWallet()}
             />
           )}
         </div>
@@ -342,7 +355,8 @@ function WalletButton(props: {
   signer: AppSigner | null; name: string | null; ready: boolean; authenticated: boolean;
   walletError: string | null; onRetryWallet: () => void;
   busy: string | null; walletUsdc: bigint; canManage: boolean;
-  onSignIn: () => void; onSignOut: () => void; onCashOut: () => void; onAddFunds: () => void;
+  legacyBalance: bigint; onWithdrawLegacy: () => void;
+  onSignIn: () => void; onSignOut: () => void;
 }) {
   const { signer, busy, walletUsdc, canManage } = props;
   const [open, setOpen] = useState(false);
@@ -364,9 +378,10 @@ function WalletButton(props: {
         <div className="card menu">
           <p className="lbl">Your Solana wallet</p>
           <CopyAddress address={address} />
-          <p className="lbl">In wallet: {usd(walletUsdc)} USDC</p>
-          {canManage && <button className="btn" onClick={act(props.onAddFunds)} disabled={walletUsdc === 0n}>Add wallet USDC</button>}
-          {canManage && <button className="btn" onClick={act(props.onCashOut)}>Cash out to wallet</button>}
+          <p className="lbl">In wallet: {usd(walletUsdc)} USDC · always yours</p>
+          {canManage && props.legacyBalance > 0n && (
+            <button className="btn" onClick={act(props.onWithdrawLegacy)}>Move old game balance ({usd(props.legacyBalance)}) to wallet</button>
+          )}
           <a className="btn" href="https://faucet.circle.com/" target="_blank" rel="noreferrer">Get devnet USDC ↗</a>
           <button className="btn" onClick={act(props.onSignOut)}>Sign out</button>
         </div>
@@ -379,9 +394,10 @@ function Onboarding(props: {
   stage: Stage; busy: string | null; error: string | null; ready: boolean; authenticated: boolean;
   address: string | null; onSignIn: () => void; onActivate: () => void;
   walletError: string | null; onRetryWallet: () => void; onSignOut: () => void; onHow: () => void;
+  walletEmpty: boolean; onRefresh: () => void;
 }) {
   const { stage, busy, error, address } = props;
-  const needsUsdc = error === NEEDS_USDC;
+  const needsUsdc = stage === "ready" && props.walletEmpty;
   return (
     <div className="overlay">
       <div className="onboard">
@@ -411,18 +427,18 @@ function Onboarding(props: {
         {address && needsUsdc && !busy && (
           <>
             <h2>Add devnet USDC</h2>
-            <p>Starter USDC has run out for now. Claim 20 free at Circle&apos;s faucet: pick <b>USDC</b> and <b>Solana Devnet</b>, paste your address, then come back.</p>
+            <p>You&apos;re all set. Claim 20 free USDC at Circle&apos;s faucet: pick <b>USDC</b> and <b>Solana Devnet</b> and paste your address. It stays in your wallet; each tap only takes its stake.</p>
             <div className="row">
               <CopyAddress address={address} />
               <a className="btn" href="https://faucet.circle.com/" target="_blank" rel="noreferrer">Open faucet ↗</a>
-              <button className="btn primary" onClick={props.onActivate}>I have USDC</button>
+              <button className="btn primary" onClick={props.onRefresh}>I have USDC</button>
             </div>
           </>
         )}
         {address && !needsUsdc && (
           <>
             <h2>{busy ? "Setting you up" : stage === "checking" ? "Checking your account" : "Almost there"}</h2>
-            <p>{busy ?? (stage === "checking" ? "One moment…" : "Your account opens on the MagicBlock rollup. No popups, no fees.")}</p>
+            <p>{busy ?? (stage === "checking" ? "One moment…" : "Your USDC stays in your wallet; each tap takes only its stake. No popups, no fees.")}</p>
             {!busy && stage !== "checking" && (
               <div className="row"><button className="btn primary" onClick={props.onActivate}>{error ? "Try again" : "Start playing"}</button></div>
             )}
@@ -517,7 +533,7 @@ export function ProofModal({ result, symbol, decimals, owner, onClose }: {
   return (
     <div className="modal-bg" onClick={onClose}>
       <div className="modal" role="dialog" aria-label="Tap proof" onClick={(e) => e.stopPropagation()}>
-        <div className="card-h"><span>Proof · {symbol} tap #{tap.id}</span><button className="iconbtn" onClick={onClose} aria-label="Close">✕</button></div>
+        <div className="card-h"><span>Proof · {symbol} tap #{tap.id & 0x7fffffff}</span><button className="iconbtn" onClick={onClose} aria-label="Close">✕</button></div>
         <p className={`verdict ${outcome === "win" ? "win" : outcome === "lose" ? "loss" : ""}`}>
           {outcome === "win" ? "Won" : outcome === "lose" ? "Lost" : "Refunded"} · {usd(tap.stake)} at {(tap.multBps / 1e4).toFixed(2)}x
         </p>
