@@ -14,6 +14,7 @@ import { usePrivySigner } from "@/lib/privy";
 import { sound } from "@/lib/sound";
 
 const SYMBOLS: Symbol[] = ["SOL", "BTC", "ETH"];
+type Tab = "you" | "live" | "leaders" | "pool";
 const STAKES = [0.5, 1, 2, 5];
 // on-chain window pricing (~250k) plus scheduling the Magic Action that collects the stake
 const TAP_COMPUTE_UNITS = 600_000;
@@ -75,6 +76,8 @@ export function Game() {
 
   const [proof, setProof] = useState<Result | null>(null);
   const [howOpen, setHowOpen] = useState(false);
+  const [tab, setTab] = useState<Tab>("live");
+  useEffect(() => { setTab(signer ? "you" : "live"); }, [signer]);
   const [latency, setLatency] = useState<number | null>(null);
   const [lastSig, setLastSig] = useState<string | null>(null);
   const [flash, setFlash] = useState(false);
@@ -192,33 +195,33 @@ export function Game() {
     else say("Setting up your account…");
   }, [account.stage, say, login]);
 
+  const pnl = player?.pnl ?? 0n;
+  const tabs: { id: Tab; label: string; count?: number }[] = [
+    ...(signer ? [{ id: "you" as const, label: "You", count: openTaps || undefined }] : []),
+    { id: "live", label: "Live", count: model.online || undefined },
+    { id: "leaders", label: "Leaders" },
+    { id: "pool", label: "Pool" },
+  ];
+
   return (
     <main className="app">
       <header className="top">
-        <div className="logo"><LogoMark /><span className="word">Quickdraw</span></div>
-        <nav className="mkts" aria-label="Markets">
+        <a className="brand" href="/" aria-label="Quickdraw home"><LogoMark size={28} /><span className="word">Quickdraw</span></a>
+        <nav className="seg" aria-label="Markets">
           {SYMBOLS.map((s) => (
-            <button key={s} className="mkt" aria-pressed={s === symbol} onClick={() => setSymbol(s)}>{s}</button>
+            <button key={s} aria-pressed={s === symbol} onClick={() => setSymbol(s)}>{s}</button>
           ))}
         </nav>
         <div className="right">
           {(() => {
-            const inner = <>
-              <span className={`pulse${model.erOk ? "" : " off"}`} />
-              <span>{latency === null ? "ER · live" : <><span className="hide-sm">tap → ER · </span>{latency}ms</>}</span>
-            </>;
-            // after a tap, the badge links to that exact transaction on the rollup's explorer
+            const inner = <><span className={`pulse${model.erOk ? "" : " off"}`} /><span>{latency === null ? "live" : `${latency} ms`}</span></>;
+            // after a tap, this links to that exact transaction on the rollup's explorer
             return lastSig
-              ? <a className={`badge${flash ? " flash" : ""}`} href={erExplorer(`tx/${lastSig}`)} target="_blank" rel="noreferrer"
+              ? <a className={`lat${flash ? " flash" : ""}`} href={erExplorer(`tx/${lastSig}`)} target="_blank" rel="noreferrer"
                   title="Your last tap on the MagicBlock rollup: open it in the explorer">{inner}</a>
-              : <div className={`badge${flash ? " flash" : ""}`} title="Time from tap to confirmation on the MagicBlock rollup">{inner}</div>;
+              : <span className="lat" title="Taps confirm on a MagicBlock rollup in milliseconds">{inner}</span>;
           })()}
-          {signer && account.stage !== "checking" && (
-            <div className="bal" title="Devnet USDC in your wallet; stakes leave it when you tap, winnings land in it">
-              <span className="lbl">Wallet</span><b>{usd(available)}</b>
-            </div>
-          )}
-          <button className="iconbtn" aria-label={soundOn ? "Mute sounds" : "Unmute sounds"} aria-pressed={soundOn}
+          <button className="iconbtn sound-toggle" aria-label={soundOn ? "Mute sounds" : "Unmute sounds"} aria-pressed={soundOn}
             onClick={() => { sound.enabled = !soundOn; setSoundOn(!soundOn); }}>
             <SoundIcon on={soundOn} />
           </button>
@@ -231,7 +234,7 @@ export function Game() {
           </button>
           <WalletButton
             signer={signer} name={auth.name} ready={auth.ready} authenticated={auth.authenticated}
-            walletError={auth.walletError} onRetryWallet={auth.retryWallet}
+            walletError={auth.walletError} onRetryWallet={auth.retryWallet} available={account.stage === "checking" ? null : available}
             busy={account.busy} walletUsdc={account.walletUsdc} canManage={account.stage === "ready"}
             legacyBalance={account.legacyBalance} onWithdrawLegacy={account.withdrawLegacy}
             onSignIn={signIn} onSignOut={signOut}
@@ -239,105 +242,108 @@ export function Game() {
         </div>
       </header>
 
-      <section className="hero">
-        <div>
-          <div className="pair">{symbol} / USD <span className="live">LIVE</span></div>
-          <div className="px">{price === null ? "—" : price.toFixed(DECIMALS[symbol])}</div>
-        </div>
-        <div className="chg" style={{ color: change >= 0 ? "var(--win)" : "var(--loss)" }}>
-          {change >= 0 ? "+" : ""}{change.toFixed(3)}% <span className="lbl">1m</span>
-        </div>
-        <div className="hint">
-          <p>Tap a box. If the price touches it before its column closes, you win the multiplier.</p>
-          {model.book && (
-            <p className="statline">
-              <b>{model.book.taps.toLocaleString()}</b> taps priced &amp; settled on-chain ·{" "}
-              <a href={`https://explorer.solana.com/address/${PROGRAM_ID.toBase58()}?cluster=devnet`} target="_blank" rel="noreferrer">program ↗</a>
-            </p>
-          )}
-        </div>
-      </section>
+      <div className="main">
+        <section className="card boardcard" aria-label={`${symbol} board`}>
+          <div className="bhead">
+            <span className="pair">{symbol} / USD</span>
+            <span className="px">{price === null ? "—" : price.toFixed(DECIMALS[symbol])}</span>
+            <span className="chg" style={{ color: change >= 0 ? "var(--win)" : "var(--loss)" }}>
+              {change >= 0 ? "+" : ""}{change.toFixed(3)}% · 1m
+            </span>
+            <div className="bmeta">
+              <span className="hint">Tap a box. Win if the price touches it before its column ends.</span>
+              {model.book && (
+                <span className="statline">
+                  <b>{model.book.taps.toLocaleString()}</b> taps priced &amp; settled on-chain ·{" "}
+                  <a href={`https://explorer.solana.com/address/${PROGRAM_ID.toBase58()}?cluster=devnet`} target="_blank" rel="noreferrer">program ↗</a>
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="boardwrap">
+            <Board model={model} stake={stake} canTap={account.stage === "ready" && model.recording} onTap={onTap} onReject={onReject} onBlocked={onBlocked} />
+            {!model.recording && account.stage === "ready" && (
+              <div className="notice" role="status">The game server is catching up with prices — tapping resumes in a few seconds.</div>
+            )}
+            {banner && (
+              <div className={`winbanner${banner.big ? " big" : ""}`} key={banner.key} role="status">
+                <span className="dotw" /><span className="lbl">Hit at {banner.mult}</span><b>+{banner.amount}</b>
+              </div>
+            )}
+          </div>
+          <div className="bfoot">
+            <span className="lbl lbl-stake">Stake</span>
+            <div className="seg stake" role="group" aria-label="Stake">
+              {STAKES.map((s) => (
+                <button key={s} aria-pressed={s === stake} onClick={() => { setStake(s); prefs.setStake(s); }}>${s < 1 ? s.toFixed(2) : s}</button>
+              ))}
+            </div>
+            <div className="stats">
+              <div><span className="lbl">Streak</span><b>{player?.streak ?? 0}</b></div>
+              <div><span className="lbl">Open</span><b>{openTaps}</b></div>
+              <div><span className="lbl">Wins</span><b>{player?.wins ?? 0}</b></div>
+              <div><span className="lbl">P&amp;L</span>
+                <b style={{ color: pnl > 0n ? "var(--win)" : pnl < 0n ? "var(--loss)" : undefined }}>{pnl > 0n ? "+" : ""}{usd(pnl)}</b>
+              </div>
+            </div>
+          </div>
+        </section>
 
-      <div className="body">
-        <div className="boardwrap">
-          <Board model={model} stake={stake} canTap={account.stage === "ready" && model.recording} onTap={onTap} onReject={onReject} onBlocked={onBlocked} />
-          {!model.recording && account.stage === "ready" && (
-            <div className="notice" role="status">The game server is catching up with prices — tapping resumes in a few seconds.</div>
-          )}
-          {banner && (
-            <div className={`winbanner${banner.big ? " big" : ""}`} key={banner.key} role="status">
-              <span className="lbl">Hit</span><b>+{banner.amount}</b><span className="mono">{banner.mult}</span>
-            </div>
-          )}
-          {/* phones: a sheet above the stake dock */}
-          {showOnboarding && <div className="overlay">{onboarding}</div>}
-        </div>
         <aside className="side">
-          {/* desktop: first card in the side column, so the board stays clear */}
-          {showOnboarding && <div className="side-onboard">{onboarding}</div>}
-          {player && <Positions model={model} onProof={setProof} />}
+          {showOnboarding && <div className="card side-onboard">{onboarding}</div>}
           <div className="card">
-            <div className="card-h"><span>Live taps</span><span>{model.online} in play</span></div>
-            {model.feed.length === 0 ? <p className="empty">New taps from every player land here live.</p> : (
-              <ul className="list">
-                {model.feed.map((f) => (
-                  <li key={f.id}><span className={`who${f.me ? " me" : ""}`}>{f.who}</span><span className={`mono ${f.tone}`}>{f.text}</span></li>
-                ))}
-              </ul>
-            )}
-          </div>
-          <div className="card">
-            <div className="card-h"><span>Leaders</span><span>P&amp;L</span></div>
-            {model.leaders.length === 0 ? <p className="empty">No trades yet.</p> : (
-              <ol className="list">
-                {model.leaders.map((l, i) => (
-                  <li key={l.owner}>
-                    <span className={`who${l.me ? " me" : ""}`}>{i + 1}. {l.me ? "you" : `${l.demo ? "demo·" : ""}${short(l.owner)}`}</span>
-                    <span className={`mono ${l.pnl > 0n ? "win" : l.pnl < 0n ? "loss" : ""}`}>{usd(l.pnl)}</span>
-                  </li>
-                ))}
-              </ol>
-            )}
-          </div>
-          {model.book && (
-            <div className="card">
-              <div className="card-h"><span>House pool</span><span>edge {(model.book.edgeBps / 100).toFixed(0)}%</span></div>
-              <ul className="list">
-                <li><span className="who">Liquidity</span><span className="mono">{usd(model.book.liquidity)}</span></li>
-                {model.book.totalShares > 0n && (
-                  <li title="USDC each LP share is worth: started at $1.00, moves with the house's results">
-                    <span className="who">LP share value</span>
-                    <span className="mono">${(Number(model.book.liquidity) / Number(model.book.totalShares)).toFixed(4)}</span>
-                  </li>
-                )}
-                <li><span className="who">Open exposure</span><span className="mono">{usd(model.book.exposure)}</span></li>
-                <li><span className="who">Volume</span><span className="mono">{usd(model.book.volume)}</span></li>
-                <li><span className="who">Taps</span><span className="mono">{model.book.taps.toString()}</span></li>
-              </ul>
+            <div className="tabs" role="tablist" aria-label="Activity">
+              {tabs.map((t) => (
+                <button key={t.id} role="tab" aria-selected={tab === t.id} onClick={() => setTab(t.id)}>
+                  {t.label}{t.count ? <span className="count">{t.count}</span> : null}
+                </button>
+              ))}
             </div>
-          )}
+            <div className="tabbody" role="tabpanel">
+              {tab === "you" && <Positions model={model} onProof={setProof} />}
+              {tab === "live" && (model.feed.length === 0 ? <p className="empty">Taps from every player land here as they happen.</p> : (
+                <ul className="list">
+                  {model.feed.map((f) => (
+                    <li key={f.id}>
+                      <span className={`dotp${f.me ? " me" : ""}${f.tone === "win" ? " won" : ""}`} />
+                      <span className={f.me ? "me" : "who"}>{f.me ? "You" : f.who}</span>
+                      <span className={`amt ${f.tone}`}>{f.text}</span>
+                    </li>
+                  ))}
+                </ul>
+              ))}
+              {tab === "leaders" && (model.leaders.length === 0 ? <p className="empty">No trades yet.</p> : (
+                <ol className="list">
+                  {model.leaders.map((l, i) => (
+                    <li key={l.owner}>
+                      <span className="rank">{i + 1}</span>
+                      <span className={l.me ? "me" : "who"}>{l.me ? "You" : `${l.demo ? "demo·" : ""}${short(l.owner)}`}</span>
+                      <span className={`amt ${l.pnl > 0n ? "win" : l.pnl < 0n ? "loss" : ""}`}>{l.pnl > 0n ? "+" : ""}{usd(l.pnl)}</span>
+                    </li>
+                  ))}
+                </ol>
+              ))}
+              {tab === "pool" && (model.book ? (
+                <div>
+                  <div className="kv"><span>Liquidity</span><span>{usd(model.book.liquidity)}</span></div>
+                  {model.book.totalShares > 0n && (
+                    <div className="kv" title="USDC each LP share is worth: started at $1.00, moves with the house's results">
+                      <span>LP share value</span><span>${(Number(model.book.liquidity) / Number(model.book.totalShares)).toFixed(4)}</span>
+                    </div>
+                  )}
+                  <div className="kv"><span>Open exposure</span><span>{usd(model.book.exposure)}</span></div>
+                  <div className="kv"><span>House edge</span><span>{(model.book.edgeBps / 100).toFixed(0)}%</span></div>
+                  <div className="kv"><span>Volume</span><span>{usd(model.book.volume)}</span></div>
+                  <div className="kv"><span>Taps</span><span>{model.book.taps.toString()}</span></div>
+                </div>
+              ) : <p className="empty">Loading the pool…</p>)}
+            </div>
+          </div>
         </aside>
       </div>
 
-      <footer className="dock">
-        <div className="stakes"><span className="lbl">Stake</span>
-          {STAKES.map((s) => (
-            <button key={s} className="chip" aria-pressed={s === stake} onClick={() => { setStake(s); prefs.setStake(s); }}>${s < 1 ? s.toFixed(2) : s}</button>
-          ))}
-        </div>
-        <div className="stats">
-          <div><span className="lbl">Streak</span><b>{player?.streak ?? 0}{(player?.streak ?? 0) >= 3 ? " 🔥" : ""}</b></div>
-          <div><span className="lbl">Open</span><b>{openTaps}</b></div>
-          <div><span className="lbl">Wins</span><b>{player?.wins ?? 0}</b></div>
-          <div>
-            <span className="lbl">P&amp;L</span>
-            <b style={{ color: (player?.pnl ?? 0n) > 0n ? "var(--win)" : (player?.pnl ?? 0n) < 0n ? "var(--loss)" : undefined }}>
-              {player ? `${player.pnl > 0n ? "+" : ""}${usd(player.pnl)}` : "$0.00"}
-            </b>
-          </div>
-        </div>
-      </footer>
-
+      {/* phones: sign-in / setup as a sheet above the stake bar */}
+      {showOnboarding && <div className="overlay"><div className="card">{onboarding}</div></div>}
       {toast && <div className={`toast${toast.bad ? " bad" : ""}`} role="status">{toast.text}</div>}
       {howOpen && <HowItWorks book={model.book} onClose={() => setHowOpen(false)} />}
       {proof && signer && (
@@ -360,32 +366,35 @@ function CopyAddress({ address }: { address: string }) {
 
 function WalletButton(props: {
   signer: AppSigner | null; name: string | null; ready: boolean; authenticated: boolean;
-  walletError: string | null; onRetryWallet: () => void;
+  walletError: string | null; onRetryWallet: () => void; available: bigint | null;
   busy: string | null; walletUsdc: bigint; canManage: boolean;
   legacyBalance: bigint; onWithdrawLegacy: () => void;
   onSignIn: () => void; onSignOut: () => void;
 }) {
   const { signer, busy, walletUsdc, canManage } = props;
   const [open, setOpen] = useState(false);
-  if (!props.ready) return <div className="connect-top"><button className="btn" disabled>Loading…</button></div>;
-  if (!props.authenticated) return <div className="connect-top"><button className="btn primary" onClick={props.onSignIn}>Sign in</button></div>;
+  if (!props.ready) return <button className="btn" disabled>Loading…</button>;
+  if (!props.authenticated) return <button className="btn primary" onClick={props.onSignIn}>Sign in</button>;
   if (!signer) {
-    return <div className="connect-top">{props.walletError
+    return props.walletError
       ? <button className="btn" onClick={props.onRetryWallet}>Retry wallet</button>
-      : <button className="btn" disabled>Creating wallet…</button>}</div>;
+      : <button className="btn" disabled>Creating wallet…</button>;
   }
   const act = (fn: () => void) => () => { setOpen(false); fn(); };
   const address = signer.publicKey.toBase58();
+  const initial = (props.name ?? address).slice(0, 1).toUpperCase();
   return (
     <div style={{ position: "relative" }}>
-      <button className="btn" onClick={() => setOpen(!open)} disabled={!!busy && canManage}>
-        <span className="mono nowrap">{busy && canManage ? busy : props.name ?? short(address)}</span>
+      <button className="walletpill" onClick={() => setOpen(!open)} aria-expanded={open} aria-label="Wallet and account">
+        <span className="lbl">{busy && canManage ? busy : "Wallet"}</span>
+        <b>{props.available === null ? "—" : usd(props.available)}</b>
+        <span className="avatar" aria-hidden="true">{initial}</span>
       </button>
       {open && (
         <div className="card menu">
-          <p className="lbl">Your Solana wallet</p>
+          <p className="lbl">{props.name ?? "Your Solana wallet"}</p>
           <CopyAddress address={address} />
-          <p className="lbl">In wallet: {usd(walletUsdc)} USDC · always yours</p>
+          <p className="lbl">{usd(walletUsdc)} devnet USDC · always in your wallet</p>
           {canManage && props.legacyBalance > 0n && (
             <button className="btn" onClick={act(props.onWithdrawLegacy)}>Move old game balance ({usd(props.legacyBalance)}) to wallet</button>
           )}
@@ -412,11 +421,11 @@ function Onboarding(props: {
           <>
             <h2>Fastest tap wins.</h2>
             <p>
-              <span className="hide-sm">Tap a box. If the price touches it before its column closes, you win the multiplier — priced and settled on-chain, taps land in ~150ms on a MagicBlock rollup. Plays with devnet USDC; we cover every fee.</span>
+              <span className="hide-sm">Sign in with Google or X. Your USDC stays in your wallet, each tap takes only its stake, and we pay every fee. Odds are priced and settled on-chain on a MagicBlock rollup.</span>
               <span className="show-sm">Tap the box the price will hit before its column closes. Priced on-chain, no fees, no popups.</span>
             </p>
             <div className="row">
-              <button className="btn primary" disabled={!props.ready} onClick={props.onSignIn}>{props.ready ? "Sign in with Google or X" : "Loading…"}</button>
+              <button className="btn primary" disabled={!props.ready} onClick={props.onSignIn}>{props.ready ? "Continue with Google or X" : "Loading…"}</button>
               <button className="btn" onClick={props.onHow}>How it works</button>
             </div>
           </>
@@ -435,7 +444,7 @@ function Onboarding(props: {
           <>
             <h2>Add devnet USDC</h2>
             <p>You&apos;re all set. Claim 20 free USDC at Circle&apos;s faucet: pick <b>USDC</b> and <b>Solana Devnet</b> and paste your address. It stays in your wallet; each tap only takes its stake.</p>
-            <div className="row">
+            <div className="row inline">
               <CopyAddress address={address} />
               <a className="btn" href="https://faucet.circle.com/" target="_blank" rel="noreferrer">Open faucet ↗</a>
               <button className="btn primary" onClick={props.onRefresh}>I have USDC</button>
@@ -460,35 +469,34 @@ function Onboarding(props: {
 function Positions({ model, onProof }: { model: LiveModel; onProof: (r: Result) => void }) {
   const now = Date.now() / 1000 - model.clockOffset;
   const open = (model.player?.taps ?? []).filter((t) => t.open && t.market.equals(model.keys.market)).sort((a, b) => a.end - b.end);
-  const recent = [...model.results].reverse().slice(0, 4);
+  const recent = [...model.results].reverse().slice(0, 8);
+  if (open.length === 0 && recent.length === 0) return <p className="empty">Tap a box on the grid to place your first tap.</p>;
   return (
-    <div className="card">
-      <div className="card-h"><span>Your taps</span><span>{open.length} open</span></div>
-      {open.length === 0 && recent.length === 0 ? <p className="empty">Tap a box on the grid to place one.</p> : (
-        <ul className="list">
-          {open.map((t) => {
-            const live = now >= t.start;
-            const secs = Math.max(0, Math.ceil((live ? t.end : t.start) - now));
-            return (
-              <li key={`o${t.id}`}>
-                <span className="who">{(t.multBps / 1e4).toFixed(1)}x · {usd(t.stake)}</span>
-                <span className="mono" style={{ color: live ? "var(--accent)" : undefined }}>{live ? `live ${secs}s` : `in ${secs}s`}</span>
-              </li>
-            );
-          })}
-          {recent.map((r) => (
-            <li key={`r${r.tap.id}-${r.at}`}>
-              <button className="proofrow" onClick={() => onProof(r)} title="See how this tap was settled">
-                <span className="who">{(r.tap.multBps / 1e4).toFixed(1)}x · {usd(r.tap.stake)}</span>
-                <span className={`mono ${r.outcome === "win" ? "win" : r.outcome === "lose" ? "loss" : ""}`}>
-                  {r.outcome === "win" ? `+${usd(r.payout)}` : r.outcome === "lose" ? `−${usd(r.tap.stake)}` : "refunded"} <span className="proofhint">proof</span>
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+    <ul className="list">
+      {open.map((t) => {
+        const live = now >= t.start;
+        const secs = Math.max(0, Math.ceil((live ? t.end : t.start) - now));
+        return (
+          <li key={`o${t.id}`}>
+            <span className="dotp me" />
+            <span className="who">{(t.multBps / 1e4).toFixed(1)}x · {usd(t.stake)}</span>
+            <span className="amt" style={{ color: live ? "var(--ink)" : undefined }}>{live ? `live · ${secs}s` : `in ${secs}s`}</span>
+          </li>
+        );
+      })}
+      {recent.map((r) => (
+        <li key={`r${r.tap.id}-${r.at}`}>
+          <button className="proofrow" onClick={() => onProof(r)} title="See how this tap was settled">
+            <span className={`dotp${r.outcome === "win" ? " won" : ""}`} />
+            <span className="who">{(r.tap.multBps / 1e4).toFixed(1)}x · {usd(r.tap.stake)}</span>
+            <span className={`amt ${r.outcome === "win" ? "win" : r.outcome === "lose" ? "loss" : ""}`}>
+              {r.outcome === "win" ? `+${usd(r.payout)}` : r.outcome === "lose" ? `−${usd(r.tap.stake)}` : "refunded"}
+              <span className="proofhint">proof ›</span>
+            </span>
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }
 
