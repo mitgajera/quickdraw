@@ -8,5 +8,10 @@
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test"
+  },
+  "pnpm": {
+    "overrides": {
+      "@solana/kit": "^8.6.0"
+    }
   }
 }
