@@ -338,3 +338,6 @@ kbd { font-family: var(--font-mono), monospace; font-size: 11px; padding: 1px 6p
 .seg.block { display: flex; width: 100%; } .seg.block button { flex: 1; }
 .notice a { color: inherit; }
 @media (min-width: 961px) { .profile { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.15fr); } }
+
+.sharewin { display: grid; place-items: center; min-height: 100vh; }
+.sharebig { font-family: var(--font-mono), monospace; font-size: 64px; font-weight: 600; color: var(--win); letter-spacing: -0.03em; margin: 6px 0; }

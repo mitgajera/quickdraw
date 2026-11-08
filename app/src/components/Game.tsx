@@ -12,6 +12,7 @@ import { erBlockhash, er, prefs, sessionKey, type AppSigner } from "@/lib/chain"
 import { LiveModel, type Result } from "@/lib/live";
 import { usePrivySigner } from "@/lib/privy";
 import { useTickers } from "@/lib/tickers";
+import { winSlug } from "@/app/w/[slug]/win";
 import { sound } from "@/lib/sound";
 
 const SYMBOLS: Symbol[] = ["SOL", "BTC", "ETH"];
@@ -679,7 +680,7 @@ export function ProofModal({ result, symbol, decimals, owner, onClose }: {
           {outcome === "win" && (
             <a className="btn primary" target="_blank" rel="noreferrer" href={`https://twitter.com/intent/tweet?${new URLSearchParams({
               text: `Hit ${(tap.multBps / 1e4).toFixed(1)}x on ${symbol} in Quickdraw: +${usd(result.payout)}, priced and settled on-chain on Solana.`,
-              url: typeof window === "undefined" ? "" : window.location.origin,
+              url: typeof window === "undefined" ? "" : `${window.location.origin}/w/${winSlug(symbol, tap.multBps, result.payout)}`,
             })}`}>Share on X ↗</a>
           )}
           <a className="btn" href={explorer} target="_blank" rel="noreferrer">Your account on the rollup ↗</a>
