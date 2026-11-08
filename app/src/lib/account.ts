@@ -97,6 +97,19 @@ export function useAccount(signer: AppSigner | null) {
     throw new Error("The rollup did not hand the account back in time — try again in a moment");
   };
 
+  /** The rollup only releases an account with no open taps: wait for them to settle first. */
+  const waitForOpenTaps = async () => {
+    const pda = playerPda(signerRef.current!.publicKey);
+    for (let i = 0; i < 90; i++) {
+      const info = await er.getAccountInfo(pda);
+      const open = info ? decodePlayer(info.data).taps.filter((t) => t.open).length : 0;
+      if (open === 0) return;
+      setBusy(`Waiting for ${open} open tap${open === 1 ? "" : "s"} to settle…`);
+      await sleep(1000);
+    }
+    throw new Error("Some taps are still open — try again once they settle");
+  };
+
   const run = useCallback(async (label: string, fn: () => Promise<void>) => {
     if (!signerRef.current) return;
     setError(null);
@@ -141,6 +154,8 @@ export function useAccount(signer: AppSigner | null) {
     const owner = signerRef.current!.publicKey;
     await ensureFunded(false);
     if ((await check()) !== "undelegated") {
+      await waitForOpenTaps();
+      setBusy("Closing your session on the rollup…");
       await send(er, [ix.undelegatePlayer(owner)]);
       setBusy("Settling back to Solana…");
       await waitForBase(false);
@@ -160,6 +175,8 @@ export function useAccount(signer: AppSigner | null) {
     if (amount === 0n) throw new Error("No devnet USDC in this wallet to add (faucet.circle.com, Solana Devnet)");
     await ensureFunded(false);
     if ((await check()) !== "undelegated") {
+      await waitForOpenTaps();
+      setBusy("Closing your session on the rollup…");
       await send(er, [ix.undelegatePlayer(owner)]);
       setBusy("Settling back to Solana…");
       await waitForBase(false);
