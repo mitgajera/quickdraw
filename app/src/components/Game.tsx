@@ -43,25 +43,34 @@ export function Game() {
 
   const [soundOn, setSoundOn] = useState(true);
   useEffect(() => setSoundOn(sound.enabled), []);
-  const [banner, setBanner] = useState<{ amount: string; mult: string; key: number } | null>(null);
-  useEffect(() => model.onResult((r: Result) => {
-    if (r.outcome === "win") {
-      sound.win();
-      setBanner({ amount: usd(r.payout), mult: `${(r.tap.multBps / 1e4).toFixed(1)}x`, key: Date.now() });
-      setTimeout(() => setBanner((b) => (b && Date.now() - b.key >= 2000 ? null : b)), 2200);
-    } else if (r.outcome === "lose") sound.lose();
-  }), [model]);
-
-  const [proof, setProof] = useState<Result | null>(null);
-  const [latency, setLatency] = useState<number | null>(null);
-  const [flash, setFlash] = useState(false);
   const [toast, setToast] = useState<{ text: string; bad: boolean } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const say = useCallback((text: string, bad = false) => {
     setToast({ text, bad }); clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 3200);
   }, []);
+  const [banner, setBanner] = useState<{ amount: string; mult: string; big: boolean; key: number } | null>(null);
+  useEffect(() => model.onResult((r: Result) => {
+    if (r.outcome === "win") {
+      sound.win();
+      const big = r.tap.multBps >= 100_000;
+      if (big && navigator.vibrate) navigator.vibrate([40, 60, 40, 60, 120]);
+      setBanner({ amount: usd(r.payout), mult: `${(r.tap.multBps / 1e4).toFixed(1)}x`, big, key: Date.now() });
+      setTimeout(() => setBanner((b) => (b && Date.now() - b.key >= 2000 ? null : b)), big ? 3200 : 2200);
+    } else if (r.outcome === "lose") {
+      sound.lose();
+      // a miss by less than one box height deserves a word
+      const ev = r.evidence;
+      if (ev?.low != null && ev.high != null) {
+        const gap = ev.high < r.tap.lo ? r.tap.lo - ev.high : ev.low > r.tap.hi ? ev.low - r.tap.hi : 0n;
+        if (gap > 0n && gap <= r.tap.hi - r.tap.lo + 1n) say(`So close — missed by $${(Number(gap) / 1e8).toFixed(Number(gap) < 1e6 ? 4 : 2)}`);
+      }
+    }
+  }), [model, say]);
 
+  const [proof, setProof] = useState<Result | null>(null);
+  const [latency, setLatency] = useState<number | null>(null);
+  const [flash, setFlash] = useState(false);
   const firstPrice = useRef<{ symbol: Symbol; p: number } | null>(null);
   const price = model.price === null ? null : Number(model.price) / 1e8;
   if (price !== null && firstPrice.current?.symbol !== symbol) firstPrice.current = { symbol, p: price };
@@ -77,6 +86,7 @@ export function Game() {
     const amount = BigInt(Math.round(stake * 1e6));
     if (!player || player.balance < amount) { say("Not enough balance for that stake", true); return; }
     sound.tap();
+    if (navigator.vibrate) navigator.vibrate(8);
     const key = `${column}:${bandIndex}:${Date.now()}`;
     const h = rowHeight(model.market!, zoom), lo = bandIndex * h, hi = lo + h - 1n;
     model.pending.push({ key, lo, hi, column, stake: amount, multBps, at: Date.now() / 1000 });
@@ -208,7 +218,7 @@ export function Game() {
             <div className="notice" role="status">The game server is catching up with prices — tapping resumes in a few seconds.</div>
           )}
           {banner && (
-            <div className="winbanner" key={banner.key} role="status">
+            <div className={`winbanner${banner.big ? " big" : ""}`} key={banner.key} role="status">
               <span className="lbl">Hit</span><b>+{banner.amount}</b><span className="mono">{banner.mult}</span>
             </div>
           )}

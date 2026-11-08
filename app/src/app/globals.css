@@ -223,3 +223,7 @@ a.btn { text-decoration: none; display: inline-block; }
 .notice { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 6; max-width: calc(100% - 24px);
   background: var(--panel); border: 1px solid var(--accent); color: var(--ink); border-radius: var(--radius);
   padding: 6px 12px; font-size: 12px; text-align: center; }
+
+/* 10x and up: a bigger, longer celebration */
+.winbanner.big { padding: 16px 26px; border-width: 2px; box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 22%, transparent), 0 18px 60px rgba(0,0,0,.45); }
+.winbanner.big b { font-size: 40px; }
