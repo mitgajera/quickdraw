@@ -171,14 +171,18 @@ export function Board({ model, stake, canTap, onTap, onReject, onBlocked }: Prop
           const y0 = yOf((j + 1) * band), y1 = yOf(j * band), w = x1 - x0, h = y1 - y0;
           const box = boxAt(market, BigInt(j), k, model.zoom);
           const q = quoteBox(book, box, price, model.publishTime, sigma, stakeUnits);
+          // rows hidden under the column-countdown strip get no label (it would show cut in half)
+          const labelled = y0 + h / 2 > 30;
           const n = heat.get(`${k}:${box.lo}`) ?? 0;
           if (n) { ctx.fillStyle = rgba(T.accent, Math.min(0.16, n * 0.04)); ctx.fillRect(x0, y0, w, h); }
           if (!q.ok && q.reason === "limit") {
             // priced, but over the house's limits at this stake: show it struck through
             ctx.fillStyle = rgba(T.mute, 0.45);
             const label = fmtMult(q.multBps), tw = ctx.measureText(label).width;
-            ctx.fillText(label, x0 + w / 2, y0 + h / 2 + 0.5);
-            ctx.fillRect(x0 + w / 2 - tw / 2 - 2, y0 + h / 2, tw + 4, 1);
+            if (labelled) {
+              ctx.fillText(label, x0 + w / 2, y0 + h / 2 + 0.5);
+              ctx.fillRect(x0 + w / 2 - tw / 2 - 2, y0 + h / 2, tw + 4, 1);
+            }
             continue;
           }
           if (!q.ok) {
@@ -192,7 +196,10 @@ export function Board({ model, stake, canTap, onTap, onReject, onBlocked }: Prop
             ctx.strokeStyle = T.accent; ctx.lineWidth = 1.5; ctx.strokeRect(x0 + 0.75, y0 + 0.75, w - 1.5, h - 1.5);
           }
           const t = clamp(Math.log(q.multBps / book.minMultBps) / Math.log(book.maxMultBps / book.minMultBps), 0, 1);
-          ctx.fillStyle = mix(T.mute, T.accent, t);
+          // heat: the likeliest boxes (low multipliers, near the price) carry a faint wash
+          if (!isHover) { ctx.fillStyle = rgba(T.accent, 0.09 * (1 - t) ** 3); ctx.fillRect(x0 + 1, y0 + 1, w - 1, h - 1); }
+          if (!labelled) continue;
+          ctx.fillStyle = mix(T.mute, T.accent, Math.sqrt(t));
           ctx.fillText(fmtMult(q.multBps), x0 + w / 2, y0 + h / 2 + 0.5);
         }
       }
