@@ -22,9 +22,9 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const GRIDS: Record<Symbol, { band: bigint; sigmaFloor: bigint }> = {
   // base rows ~0.7x each market's realised per-second volatility; the app zooms out (up to 16x)
   // when a market is busy, so calm markets still move and busy ones keep a gradient of odds
-  SOL: { band: 375_000n, sigmaFloor: 150_000n },          // $0.00375 base rows, $0.0015/sqrt(s)
-  BTC: { band: 250_000_000n, sigmaFloor: 40_000_000n },   // $2.50 base rows, $0.40/sqrt(s)
-  ETH: { band: 7_500_000n, sigmaFloor: 1_200_000n },      // $0.075 base rows, $0.012/sqrt(s)
+  SOL: { band: 375_000n, sigmaFloor: 75_000n },           // $0.00375 base rows, $0.00075/sqrt(s)
+  BTC: { band: 250_000_000n, sigmaFloor: 20_000_000n },   // $2.50 base rows, $0.20/sqrt(s)
+  ETH: { band: 7_500_000n, sigmaFloor: 600_000n },        // $0.075 base rows, $0.006/sqrt(s)
 };
 const COL_SECS = 4;
 
@@ -40,7 +40,7 @@ console.log(`authority ${me.publicKey.toBase58()}`);
 const book = bookPda();
 if (!(await owner(base, book))) {
   await run("init_book", base, [buildIx("init_book", known, {
-    params: { edge_bps: 700, min_mult_bps: 11_000, max_mult_bps: 500_000, max_exposure_bps: 5_000, max_profit: 50n * USD },
+    params: { edge_bps: 1000, min_mult_bps: 11_000, max_mult_bps: 500_000, max_exposure_bps: 5_000, max_profit: 50n * USD },
   })]);
 }
 

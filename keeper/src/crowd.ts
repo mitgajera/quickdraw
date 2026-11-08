@@ -41,7 +41,7 @@ async function tapOnce(er: Connection, bot: Keypair, markets: MarketKeys[]): Pro
     const q = quoteBox(book, boxAt(market, bandIndex, column, zoom), o.price, o.publishTime, sigma);
     if (!q.ok || q.multBps < 15_000 || q.multBps > 120_000) continue;
     const tx = new Transaction().add(
-      ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }),
+      ComputeBudgetProgram.setComputeUnitLimit({ units: 800_000 }),
       ix.placeTap({ signer: bot.publicKey, owner: bot.publicKey, market: m, bandIndex, column, zoom, stake, minMultBps: Math.floor(q.multBps * 0.85) }),
     );
     tx.recentBlockhash = (await er.getLatestBlockhash()).blockhash;

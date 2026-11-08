@@ -44,7 +44,7 @@ const row = o.price / rowHeight(market, zoom), column = Math.floor(o.publishTime
 for (const dRow of [1n, -1n]) {
   const q = quoteBox(book, boxAt(market, row + dRow, column, zoom), o.price, o.publishTime, sigma);
   if (!q.ok) { console.log(`row ${dRow}: not offered (${q.reason})`); continue; }
-  const tx = new Transaction().add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }), ix.placeTap({
+  const tx = new Transaction().add(ComputeBudgetProgram.setComputeUnitLimit({ units: 800_000 }), ix.placeTap({
     signer: session.publicKey, owner: player.publicKey, market: m, bandIndex: row + dRow, column, zoom,
     stake: 1_000_000n, minMultBps: Math.floor(q.multBps * 0.85),
   }));

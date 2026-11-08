@@ -56,12 +56,19 @@ const [mi, bi, ci, oi] = await er.getMultipleAccountsInfo([m.market, bookPda(), 
 const market = decodeMarket(mi!.data), book = decodeBook(bi!.data), candles = decodeCandles(ci!.data), o = decodeOracle(oi!.data);
 const sigma = sigmaFor(market, candles, o.publishTime);
 const zoom = idealZoom(market, book, o.price, o.publishTime, sigma);
-const row = o.price / rowHeight(market, zoom), column = Math.floor(o.publishTime / market.colSecs) + 2;
 const stake = 1_000_000n;
-const q = quoteBox(book, boxAt(market, row, column, zoom), o.price, o.publishTime, sigma, stake);
-if (!q.ok) throw new Error(`box not offered: ${q.reason}`);
-const tx = new Transaction().add(ComputeBudgetProgram.setComputeUnitLimit({ units: 600_000 }), ix.placeWalletTap({
-  signer: owner, owner, market: m, bandIndex: row, column, zoom, stake, minMultBps: Math.floor(q.multBps * 0.85),
+// the nearest box the program offers (the one holding the price is usually too likely to be offered)
+const pick = (() => {
+  const base0 = o.price / rowHeight(market, zoom), col0 = Math.floor(o.publishTime / market.colSecs) + 2;
+  for (const d of [0n, 1n, -1n, 2n, -2n]) for (const c of [col0, col0 + 1]) {
+    const q = quoteBox(book, boxAt(market, base0 + d, c, zoom), o.price, o.publishTime, sigma, stake);
+    if (q.ok) return { row: base0 + d, column: c, q };
+  }
+  throw new Error("no box offered near the price");
+})();
+const { row, column, q } = pick;
+const tx = new Transaction().add(ComputeBudgetProgram.setComputeUnitLimit({ units: 1_000_000 }), ix.placeWalletTap({
+  signer: owner, owner, market: m, bandIndex: row, column, zoom, stake, minMultBps: Math.floor(q.multBps * 0.85), quotedMultBps: q.multBps,
 }));
 tx.recentBlockhash = (await er.getLatestBlockhash()).blockhash;
 tx.feePayer = owner;
