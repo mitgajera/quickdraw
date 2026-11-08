@@ -6,13 +6,13 @@ import {
   decodePlayer, idealZoom, judge, marketKeys, payoutOf, playerPda, sigmaFor,
   type Book, type Candles, type Market, type MarketKeys, type Player, type Symbol, type TapSlot,
 } from "@quickdraw/sdk";
-import { base, er } from "./chain";
+import { KEEPER_URL, base, er } from "./chain";
 
 export interface PricePoint { t: number; p: number }
 export interface Result { tap: TapSlot; outcome: "win" | "lose" | "void"; at: number; payout: bigint }
 export interface Pending { key: string; lo: bigint; hi: bigint; column: number; stake: bigint; multBps: number; at: number }
 export interface FeedItem { id: string; who: string; me: boolean; text: string; tone: "win" | "loss" | "" }
-export interface Leader { owner: string; pnl: bigint; wins: number; taps: number; me: boolean }
+export interface Leader { owner: string; pnl: bigint; wins: number; taps: number; me: boolean; demo: boolean }
 
 const short = (k: PublicKey | string) => { const s = typeof k === "string" ? k : k.toBase58(); return `${s.slice(0, 4)}…${s.slice(-3)}`; };
 const usd = (v: bigint) => `$${(Number(v) / 1e6).toFixed(2)}`;
@@ -67,7 +67,12 @@ export class LiveModel {
     void this.fast();
   }
 
+  /** House-run demo wallets (from the keeper), labelled so nobody mistakes them for players. */
+  demo = new Set<string>();
+  name(owner: PublicKey) { return `${this.demo.has(owner.toBase58()) ? "demo·" : ""}${short(owner)}`; }
+
   start() {
+    void fetch(`${KEEPER_URL}/bots`).then((r) => r.json() as Promise<string[]>).then((list) => { this.demo = new Set(list); }).catch(() => {});
     // React dev mode mounts twice (start, stop, start): reset rather than stay stopped
     this.stopped = false;
     this.timers.forEach(clearInterval);
@@ -200,7 +205,7 @@ export class LiveModel {
         .map((p) => ({ owner: p.owner, taps: p.taps.filter((t) => t.open && t.market.equals(this.keys.market)) }));
       this.leaders = players
         .filter((p) => p.tapsPlaced > 0)
-        .map((p) => ({ owner: p.owner.toBase58(), pnl: p.pnl, wins: p.wins, taps: p.tapsPlaced, me: p.owner.toBase58() === me }))
+        .map((p) => ({ owner: p.owner.toBase58(), pnl: p.pnl, wins: p.wins, taps: p.tapsPlaced, me: p.owner.toBase58() === me, demo: this.demo.has(p.owner.toBase58()) }))
         .sort((a, b) => (b.pnl > a.pnl ? 1 : b.pnl < a.pnl ? -1 : 0))
         .slice(0, 8);
       this.online = players.filter((p) => p.taps.some((t) => t.open)).length;
@@ -210,15 +215,15 @@ export class LiveModel {
         if (seen) {
           for (const t of o.taps) {
             if (!seen.has(t.id)) {
-              this.pushFeed({ id: `${k}-${t.id}`, who: short(o.owner), me: false, tone: "", text: `${usd(t.stake)} · ${mult(t.multBps)}` });
+              this.pushFeed({ id: `${k}-${t.id}`, who: this.name(o.owner), me: false, tone: "", text: `${usd(t.stake)} · ${mult(t.multBps)}` });
             }
           }
           // their taps that closed since last scan: same rule the keeper settled them by
           for (const [id, t] of seen) {
             if (o.taps.some((x) => x.id === id) || !this.candles) continue;
             const outcome = judge(this.candles, t.lo, t.hi, t.start, t.end, Math.max(this.publishTime, t.end));
-            if (outcome === "win") this.pushFeed({ id: `${k}-${id}-w`, who: short(o.owner), me: false, tone: "win", text: `won ${usd(payoutOf(t))}` });
-            else if (outcome === "lose") this.pushFeed({ id: `${k}-${id}-l`, who: short(o.owner), me: false, tone: "loss", text: `lost ${usd(t.stake)}` });
+            if (outcome === "win") this.pushFeed({ id: `${k}-${id}-w`, who: this.name(o.owner), me: false, tone: "win", text: `won ${usd(payoutOf(t))}` });
+            else if (outcome === "lose") this.pushFeed({ id: `${k}-${id}-l`, who: this.name(o.owner), me: false, tone: "loss", text: `lost ${usd(t.stake)}` });
           }
         }
         this.seenOthers.set(k, new Map(o.taps.map((t) => [t.id, t])));

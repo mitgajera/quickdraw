@@ -207,7 +207,7 @@ export function Game() {
               <ol className="list">
                 {model.leaders.map((l, i) => (
                   <li key={l.owner}>
-                    <span className={`who${l.me ? " me" : ""}`}>{i + 1}. {l.me ? "you" : short(l.owner)}</span>
+                    <span className={`who${l.me ? " me" : ""}`}>{i + 1}. {l.me ? "you" : `${l.demo ? "demo·" : ""}${short(l.owner)}`}</span>
                     <span className={`mono ${l.pnl > 0n ? "win" : l.pnl < 0n ? "loss" : ""}`}>{usd(l.pnl)}</span>
                   </li>
                 ))}
