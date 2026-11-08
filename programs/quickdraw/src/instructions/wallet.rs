@@ -95,7 +95,10 @@ pub fn init_ledger_handler(ctx: Context<InitLedger>) -> Result<()> {
     Ok(())
 }
 
-/// Taps a box with USDC that stays in the player's wallet until this tap claims it (ER).
+/// Taps a box with USDC that stays in the player's wallet until this tap claims it (ER). The tap pays
+/// the program's own price for the box, but never more than `quoted_mult_bps` (the multiplier the
+/// player saw) and never less than `min_mult_bps`, so what you tap is what you get.
+#[allow(clippy::too_many_arguments)]
 pub fn place_wallet_tap_handler<'info>(
     mut ctx: Context<'info, PlaceWalletTap<'info>>,
     band_index: i64,
@@ -103,6 +106,7 @@ pub fn place_wallet_tap_handler<'info>(
     zoom: u8,
     stake: u64,
     min_mult_bps: u32,
+    quoted_mult_bps: u32,
 ) -> Result<()> {
     require!(stake > 0, QuickdrawError::ZeroAmount);
     let clock = Clock::get()?.unix_timestamp;
@@ -128,11 +132,16 @@ pub fn place_wallet_tap_handler<'info>(
 
     let reading = read_oracle_price(&accounts.oracle)?;
     require!(clock - reading.publish_time <= TAP_ORACLE_MAX_AGE, QuickdrawError::StaleOracle);
-    let q = {
+    let mut q = {
         let candles = accounts.candles.load()?;
         quote(&accounts.market, &accounts.book, &candles, reading.price, reading.publish_time, band_index, column, zoom, stake)?
     };
     require!(q.mult_bps >= min_mult_bps, QuickdrawError::Slippage);
+    if quoted_mult_bps < q.mult_bps {
+        q.mult_bps = quoted_mult_bps.max(accounts.book.min_mult_bps);
+        q.payout = u64::try_from(stake as u128 * q.mult_bps as u128 / crate::odds::ONE_X_BPS as u128)
+            .map_err(|_| QuickdrawError::Overflow)?;
+    }
     require!(has_capacity(&accounts.book, stake, q.payout), QuickdrawError::ExposureLimit);
 
     let player = &mut accounts.player;
