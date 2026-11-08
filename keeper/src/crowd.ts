@@ -22,7 +22,10 @@ async function tapOnce(er: Connection, bot: Keypair, markets: MarketKeys[]): Pro
   const playerInfo = await er.getAccountInfo(playerPda(bot.publicKey));
   if (!playerInfo) return "not on the rollup (run bots:setup)";
   const balance = decodePlayer(playerInfo.data).balance;
-  const stake = balance >= 2_000_000n && Math.random() < 0.4 ? 1_000_000n : 500_000n;
+  // small, varied stakes so a few dollars keeps a bot playing for hours
+  const stakes = [100_000n, 100_000n, 250_000n, 250_000n, 500_000n].filter((s) => s <= balance);
+  if (stakes.length === 0) return "out of balance";
+  const stake = stakes[Math.floor(Math.random() * stakes.length)]!;
   if (balance < stake) return "out of balance";
 
   const m = chooseMarket(markets);
