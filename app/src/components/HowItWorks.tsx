@@ -26,7 +26,7 @@ export function HowItWorks({ book, onClose }: { book: Book | null; onClose: () =
           </li>
           <li>
             <b>Odds are computed on-chain.</b> When you tap, the program prices the box itself: the chance the price
-            touches that band in that window, from volatility it measures on its own price record. Multiplier = (1 − {edge}
+            touches that band in that window, from volatility it measures on its own price record. Multiplier = (1 − {edge}{" "}
             house edge) ÷ chance, between {minX} and {maxX}. The app shows the same math, but the program decides.
           </li>
           <li>
