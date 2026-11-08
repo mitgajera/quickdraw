@@ -372,7 +372,8 @@ export function Board({ model, stake, canTap, onTap, onReject, onBlocked }: Prop
         const q = quoteAt(hover.k, hover.j);
         if (q?.ok) {
           const s = props.current.stake;
-          const txt = `$${s.toFixed(2)} → ${money((s * q.multBps) / 1e4)}`;
+          const chance = model.book ? Math.round(((1e4 - model.book.edgeBps) / q.multBps) * 100) : null;
+          const txt = `$${s.toFixed(2)} → ${money((s * q.multBps) / 1e4)}${chance !== null ? ` · ${chance}% chance` : ""}`;
           ctx.font = `600 11px ${monoFont}`;
           const tw = ctx.measureText(txt).width + 14;
           const x = xOf(hover.k * col) + colPx / 2, y = yOf((hover.j + 1) * band) - 8;
