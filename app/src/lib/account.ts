@@ -44,25 +44,27 @@ export function useAccount(signer: AppSigner | null) {
   const signerRef = useRef(signer);
   signerRef.current = signer;
 
-  /** Wallet USDC, allowance and the ledger, in one read. */
-  const readWallet = useCallback(async () => {
+  /** Wallet USDC, allowance and the ledger, in one read (plus the player account when asked). */
+  const readWallet = useCallback(async (withPlayer = false) => {
     const s = signerRef.current;
     if (!s) return null;
-    const [ata, ledger] = await base.getMultipleAccountsInfo([ataOf(s.publicKey), ledgerPda(s.publicKey)]);
+    const keys = [ataOf(s.publicKey), ledgerPda(s.publicKey), ...(withPlayer ? [playerPda(s.publicKey)] : [])];
+    const [ata, ledger, player] = await base.getMultipleAccountsInfo(keys);
     const tokens = ata ? decodeTokenAccount(ata.data) : { amount: 0n, delegate: null, delegated: 0n };
     const led = ledger ? decodeLedger(ledger.data) : null;
     if (signerRef.current === s) {
       setWalletUsdc(tokens.amount);
       if (led) setCollected(new Set(led.collected.filter((id) => id !== 0)));
     }
-    return { tokens, ledger: led };
+    return { tokens, ledger: led, player: player ?? null };
   }, []);
 
   const check = useCallback(async (): Promise<Stage> => {
     const s = signerRef.current;
     if (!s) { setStage("disconnected"); return "disconnected"; }
     const pda = playerPda(s.publicKey);
-    const [info, w] = await Promise.all([base.getAccountInfo(pda), readWallet()]);
+    const w = await readWallet(true);
+    const info = w?.player ?? null;
     const approved = !!w && w.tokens.delegate === VAULT_HEX && w.tokens.delegated >= ALLOWANCE_FLOOR;
     let next: Stage;
     if (!info || !w?.ledger || !approved || !info.owner.equals(DELEGATION_PROGRAM_ID)) next = "setup";
@@ -81,7 +83,23 @@ export function useAccount(signer: AppSigner | null) {
   useEffect(() => {
     setError(null);
     setStage(signer ? "checking" : "disconnected");
-    void check().catch((e) => setError(explainError(e)));
+    if (!signer) return;
+    // Devnet RPC drops requests under load: keep trying (backing off) instead of stalling on one failure.
+    let cancelled = false;
+    void (async () => {
+      for (let i = 0; !cancelled; i++) {
+        try {
+          await check();
+          if (!cancelled) setError(null);
+          return;
+        } catch (e) {
+          if (cancelled) return;
+          if (i >= 1) setError("Solana devnet is busy, retrying…");
+          await sleep(Math.min(8_000, 1_000 * 2 ** i));
+        }
+      }
+    })();
+    return () => { cancelled = true; };
   }, [signer, check]);
 
   // the wallet is the balance: keep it live (stakes leave and winnings arrive on Solana)

@@ -1,8 +1,26 @@
 import { Connection, Keypair, type PublicKey, type Transaction } from "@solana/web3.js";
 import { BASE_RPC, ER_RPC } from "@quickdraw/sdk";
 
-export const base = new Connection(process.env.NEXT_PUBLIC_BASE_RPC ?? BASE_RPC, "confirmed");
-export const er = new Connection(process.env.NEXT_PUBLIC_ER_RPC ?? ER_RPC, "confirmed");
+/**
+ * fetch with a few quick retries. Public devnet RPC rate-limits hard, and in a browser a 429 often
+ * arrives without CORS headers, so it surfaces as "Failed to fetch" and web3.js never retries it.
+ * JSON-RPC reads and sends are safe to repeat (a resent transaction has the same signature).
+ */
+const RETRIES = 4;
+const retryingFetch: typeof fetch = async (input, init) => {
+  for (let i = 0; ; i++) {
+    try {
+      const res = await fetch(input, init);
+      if ((res.status !== 429 && res.status < 500) || i >= RETRIES) return res;
+    } catch (e) {
+      if (i >= RETRIES) throw e;
+    }
+    await new Promise((r) => setTimeout(r, 250 * 2 ** i + Math.random() * 200));
+  }
+};
+
+export const base = new Connection(process.env.NEXT_PUBLIC_BASE_RPC ?? BASE_RPC, { commitment: "confirmed", fetch: retryingFetch });
+export const er = new Connection(process.env.NEXT_PUBLIC_ER_RPC ?? ER_RPC, { commitment: "confirmed", fetch: retryingFetch });
 export const KEEPER_URL = process.env.NEXT_PUBLIC_KEEPER_URL ?? "http://localhost:8787";
 
 /** ER blockhash cache so a tap does not wait on an extra RPC round trip. */
