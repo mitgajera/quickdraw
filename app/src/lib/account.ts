@@ -11,6 +11,8 @@ import { KEEPER_URL, base, er, sessionKey, type AppSigner } from "./chain";
 export type Stage = "disconnected" | "checking" | "new" | "undelegated" | "session" | "ready";
 
 const SESSION_SECONDS = 24 * 60 * 60;
+/** activate() fails with this when the wallet has no USDC and the starter grants have run out. */
+export const NEEDS_USDC = "Your wallet needs devnet USDC to play";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export function useAccount(signer: AppSigner | null) {
@@ -62,20 +64,24 @@ export function useAccount(signer: AppSigner | null) {
     return sendSigned(conn, signed, { pollMs: conn === base ? 500 : 30, timeoutMs: 60_000 });
   };
 
-  /** Opening the account costs a little devnet SOL in rent; the keeper tops up empty wallets. */
-  const ensureSol = async () => {
+  /**
+   * The house pays every fee: the keeper sends a new wallet devnet SOL for base-layer fees and rent,
+   * plus starter USDC while its welcome budget lasts. Players never need SOL.
+   */
+  const ensureFunded = async (wantUsdc: boolean) => {
     const s = signerRef.current!;
-    if ((await base.getBalance(s.publicKey)) >= 0.02 * LAMPORTS_PER_SOL) return;
-    setBusy("Topping up devnet SOL for fees…");
-    const res = await fetch(`${KEEPER_URL}/sponsor`, {
+    const hasSol = async () => (await base.getBalance(s.publicKey)) >= 0.02 * LAMPORTS_PER_SOL;
+    if ((await hasSol()) && !wantUsdc) return;
+    setBusy(wantUsdc ? "Sending you starter USDC…" : "Covering your network fees…");
+    const res = await fetch(`${KEEPER_URL}/welcome`, {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ wallet: s.publicKey.toBase58() }),
-    }).then((r) => r.json() as Promise<{ ok?: boolean; reason?: string; error?: string }>).catch(() => ({ ok: false, reason: "keeper offline" }));
-    if (!res.ok) throw new Error(`This wallet needs a little devnet SOL for fees (${"error" in res && res.error ? res.error : res.reason})`);
+    }).then((r) => r.json() as Promise<{ ok?: boolean; usdc?: number; error?: string }>).catch(() => ({ ok: false, usdc: 0, error: "the game server is waking up, try again in a moment" }));
+    if (!res.ok) throw new Error(`Could not set up your wallet: ${res.error ?? "unknown error"}`);
     for (let i = 0; i < 40; i++) {
-      if ((await base.getBalance(s.publicKey)) >= 0.02 * LAMPORTS_PER_SOL) return;
+      if ((await hasSol()) && (!res.usdc || (await readWalletUsdc()) > 0n)) return;
       await sleep(750);
     }
-    throw new Error("Devnet SOL top-up did not arrive");
+    throw new Error("Setup is taking longer than usual, try again in a moment");
   };
 
   const waitForBase = async (delegated: boolean) => {
@@ -109,9 +115,9 @@ export function useAccount(signer: AppSigner | null) {
     const current = await check();
     const expires = Math.floor(Date.now() / 1000) + SESSION_SECONDS;
     if (current === "new" || current === "undelegated") {
+      await ensureFunded(current === "new" && (await readWalletUsdc()) === 0n);
       const amount = await readWalletUsdc();
-      if (current === "new" && amount === 0n) throw new Error("Get devnet USDC first (faucet.circle.com, Solana Devnet), then deposit it here");
-      await ensureSol();
+      if (current === "new" && amount === 0n) throw new Error(NEEDS_USDC);
       const session = sessionKey(owner, true)!;
       const ixs: TransactionInstruction[] = [];
       if (current === "new") ixs.push(ix.initPlayer(owner));
@@ -130,6 +136,7 @@ export function useAccount(signer: AppSigner | null) {
   /** Takes the account off the rollup and withdraws its whole balance to the wallet. */
   const cashOut = useCallback(() => run("Closing your session on the rollup…", async () => {
     const owner = signerRef.current!.publicKey;
+    await ensureFunded(false);
     if ((await check()) !== "undelegated") {
       await send(er, [ix.undelegatePlayer(owner)]);
       setBusy("Settling back to Solana…");
@@ -148,6 +155,7 @@ export function useAccount(signer: AppSigner | null) {
     const owner = signerRef.current!.publicKey;
     const amount = await readWalletUsdc();
     if (amount === 0n) throw new Error("No devnet USDC in this wallet to add (faucet.circle.com, Solana Devnet)");
+    await ensureFunded(false);
     if ((await check()) !== "undelegated") {
       await send(er, [ix.undelegatePlayer(owner)]);
       setBusy("Settling back to Solana…");
