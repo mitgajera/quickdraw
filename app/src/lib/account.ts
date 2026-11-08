@@ -1,61 +1,95 @@
-// Where the connected wallet is in the onboarding flow, and the actions that move it on: deposit
-// devnet USDC and open the account, add funds, cash out. Rollup transactions are free, so the
-// session key needs no SOL of its own.
+// Wallet play: the player's devnet USDC stays in their own wallet. Setup is one silent transaction
+// (allowance for the house vault, a ledger, the player account on the rollup); after that each tap's
+// stake is pulled from the wallet on Solana by a Magic Action, and winnings are paid straight back.
+// Rollup transactions are free, so the session key needs no SOL of its own.
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Buffer } from "buffer";
 import { LAMPORTS_PER_SOL, type TransactionInstruction } from "@solana/web3.js";
 import {
-  PROGRAM_ID, ataOf, buildTx, decodePlayer, explainError, ix, playerPda, sendSigned,
+  DELEGATION_PROGRAM_ID, PROGRAM_ID, WALLET_ALLOWANCE, ataOf, buildTx, createAtaIdempotent, decodeLedger, decodePlayer,
+  explainError, ix, ledgerPda, playerPda, sendSigned, vaultPda,
 } from "@quickdraw/sdk";
 import { KEEPER_URL, base, er, sessionKey, type AppSigner } from "./chain";
 
-export type Stage = "disconnected" | "checking" | "new" | "undelegated" | "session" | "ready";
+export type Stage = "disconnected" | "checking" | "setup" | "session" | "ready";
 
 const SESSION_SECONDS = 24 * 60 * 60;
-/** activate() fails with this when the wallet has no USDC and the starter grants have run out. */
-export const NEEDS_USDC = "Your wallet needs devnet USDC to play";
+/** Re-approve once the remaining allowance drops below this (100 USDC). */
+const ALLOWANCE_FLOOR = 100_000_000n;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** The parts of an SPL token account the game cares about. */
+interface WalletTokens { amount: bigint; delegate: string | null; delegated: bigint }
+function decodeTokenAccount(data: Uint8Array): WalletTokens {
+  const b = Buffer.from(data);
+  const hasDelegate = b.readUInt32LE(72) === 1;
+  return {
+    amount: b.readBigUInt64LE(64),
+    delegate: hasDelegate ? Buffer.from(b.subarray(76, 108)).toString("hex") : null,
+    delegated: b.readBigUInt64LE(121),
+  };
+}
+const VAULT_HEX = Buffer.from(vaultPda().toBytes()).toString("hex");
 
 export function useAccount(signer: AppSigner | null) {
   const [stage, setStage] = useState<Stage>("disconnected");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  /** Devnet USDC still in the wallet (not yet deposited), in 6-decimal units. */
+  /** Devnet USDC in the wallet (6 decimals): this is the player's balance. */
   const [walletUsdc, setWalletUsdc] = useState<bigint>(0n);
+  /** Ids of wallet taps whose stake has been collected on Solana (from the ledger). */
+  const [collected, setCollected] = useState<Set<number>>(new Set());
+  /** Balance left in the old deposit-based game account, if any (can be withdrawn). */
+  const [legacyBalance, setLegacyBalance] = useState<bigint>(0n);
   const signerRef = useRef(signer);
   signerRef.current = signer;
 
-  const readWalletUsdc = useCallback(async () => {
+  /** Wallet USDC, allowance and the ledger, in one read. */
+  const readWallet = useCallback(async () => {
     const s = signerRef.current;
-    if (!s) return 0n;
-    const r = await base.getTokenAccountBalance(ataOf(s.publicKey)).catch(() => null);
-    const amount = BigInt(r?.value.amount ?? "0");
-    if (signerRef.current === s) setWalletUsdc(amount);
-    return amount;
+    if (!s) return null;
+    const [ata, ledger] = await base.getMultipleAccountsInfo([ataOf(s.publicKey), ledgerPda(s.publicKey)]);
+    const tokens = ata ? decodeTokenAccount(ata.data) : { amount: 0n, delegate: null, delegated: 0n };
+    const led = ledger ? decodeLedger(ledger.data) : null;
+    if (signerRef.current === s) {
+      setWalletUsdc(tokens.amount);
+      if (led) setCollected(new Set(led.collected.filter((id) => id !== 0)));
+    }
+    return { tokens, ledger: led };
   }, []);
 
   const check = useCallback(async (): Promise<Stage> => {
     const s = signerRef.current;
     if (!s) { setStage("disconnected"); return "disconnected"; }
     const pda = playerPda(s.publicKey);
-    const [info] = await Promise.all([base.getAccountInfo(pda), readWalletUsdc()]);
+    const [info, w] = await Promise.all([base.getAccountInfo(pda), readWallet()]);
+    const approved = !!w && w.tokens.delegate === VAULT_HEX && w.tokens.delegated >= ALLOWANCE_FLOOR;
     let next: Stage;
-    if (!info) next = "new";
-    else if (info.owner.equals(PROGRAM_ID)) next = "undelegated";
+    if (!info || !w?.ledger || !approved || !info.owner.equals(DELEGATION_PROGRAM_ID)) next = "setup";
     else {
       const onEr = await er.getAccountInfo(pda);
       const session = sessionKey(s.publicKey, false);
       const p = onEr ? decodePlayer(onEr.data) : null;
+      if (p && signerRef.current === s) setLegacyBalance(p.balance);
       next = p && session && p.session.equals(session.publicKey) && p.sessionExpires > Date.now() / 1000 + 60 ? "ready" : "session";
     }
+    if (info && info.owner.equals(PROGRAM_ID) && signerRef.current === s) setLegacyBalance(decodePlayer(info.data).balance);
     if (signerRef.current === s) setStage(next);
     return next;
-  }, [readWalletUsdc]);
+  }, [readWallet]);
 
   useEffect(() => {
     setError(null);
     setStage(signer ? "checking" : "disconnected");
     void check().catch((e) => setError(explainError(e)));
   }, [signer, check]);
+
+  // the wallet is the balance: keep it live (stakes leave and winnings arrive on Solana)
+  useEffect(() => {
+    if (!signer) return;
+    const id = setInterval(() => { if (!document.hidden) void readWallet().catch(() => {}); }, 1500);
+    return () => clearInterval(id);
+  }, [signer, readWallet]);
 
   const send = async (conn: typeof base, ixs: TransactionInstruction[]) => {
     const s = signerRef.current!;
@@ -70,7 +104,7 @@ export function useAccount(signer: AppSigner | null) {
    */
   const ensureFunded = async (wantUsdc: boolean) => {
     const s = signerRef.current!;
-    const hasSol = async () => (await base.getBalance(s.publicKey)) >= 0.02 * LAMPORTS_PER_SOL;
+    const hasSol = async () => (await base.getBalance(s.publicKey)) >= 0.01 * LAMPORTS_PER_SOL;
     if ((await hasSol()) && !wantUsdc) return;
     setBusy(wantUsdc ? "Sending you starter USDC…" : "Covering your network fees…");
     const token = await s.authToken().catch(() => null);
@@ -79,35 +113,15 @@ export function useAccount(signer: AppSigner | null) {
       headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
       body: JSON.stringify({ wallet: s.publicKey.toBase58() }),
     }).then((r) => r.json() as Promise<{ ok?: boolean; usdc?: number; error?: string }>).catch(() => ({ ok: false, usdc: 0, error: "the game server is waking up, try again in a moment" }));
-    if (!res.ok) throw new Error(`Could not set up your wallet: ${res.error ?? "unknown error"}`);
+    if (!res.ok) {
+      if (await hasSol()) return; // starter USDC is a bonus; fees are what setup needs
+      throw new Error(`Could not set up your wallet: ${res.error ?? "unknown error"}`);
+    }
     for (let i = 0; i < 40; i++) {
-      if ((await hasSol()) && (!res.usdc || (await readWalletUsdc()) > 0n)) return;
+      if ((await hasSol()) && (!res.usdc || (await readWallet())!.tokens.amount > 0n)) return;
       await sleep(750);
     }
     throw new Error("Setup is taking longer than usual, try again in a moment");
-  };
-
-  const waitForBase = async (delegated: boolean) => {
-    const pda = playerPda(signerRef.current!.publicKey);
-    for (let i = 0; i < 60; i++) {
-      const owner = (await base.getAccountInfo(pda))?.owner;
-      if (owner && owner.equals(PROGRAM_ID) !== delegated) return;
-      await sleep(750);
-    }
-    throw new Error("The rollup did not hand the account back in time — try again in a moment");
-  };
-
-  /** The rollup only releases an account with no open taps: wait for them to settle first. */
-  const waitForOpenTaps = async () => {
-    const pda = playerPda(signerRef.current!.publicKey);
-    for (let i = 0; i < 90; i++) {
-      const info = await er.getAccountInfo(pda);
-      const open = info ? decodePlayer(info.data).taps.filter((t) => t.open).length : 0;
-      if (open === 0) return;
-      setBusy(`Waiting for ${open} open tap${open === 1 ? "" : "s"} to settle…`);
-      await sleep(1000);
-    }
-    throw new Error("Some taps are still open — try again once they settle");
   };
 
   const run = useCallback(async (label: string, fn: () => Promise<void>) => {
@@ -125,72 +139,61 @@ export function useAccount(signer: AppSigner | null) {
     }
   }, [check]);
 
-  /** Deposits the wallet's devnet USDC and gets to "ready" with one signature where possible. */
-  const activate = useCallback(() => run("Opening your account…", async () => {
+  /**
+   * Gets to "ready" with one silent transaction: allow the house vault to spend USDC from the wallet
+   * (it stays in the wallet), open the ledger and player account, and move the account to the rollup.
+   */
+  const activate = useCallback(() => run("Setting up…", async () => {
     const owner = signerRef.current!.publicKey;
     const current = await check();
     const expires = Math.floor(Date.now() / 1000) + SESSION_SECONDS;
-    if (current === "new" || current === "undelegated") {
-      await ensureFunded(current === "new" && (await readWalletUsdc()) === 0n);
-      const amount = await readWalletUsdc();
-      if (current === "new" && amount === 0n) throw new Error(NEEDS_USDC);
+    if (current === "setup") {
+      const w = await readWallet();
+      await ensureFunded(!w || w.tokens.amount === 0n);
+      const [info, ledger, ata] = await base.getMultipleAccountsInfo([playerPda(owner), ledgerPda(owner), ataOf(owner)]);
+      const tokens = ata ? decodeTokenAccount(ata.data) : null;
       const session = sessionKey(owner, true)!;
       const ixs: TransactionInstruction[] = [];
-      if (current === "new") ixs.push(ix.initPlayer(owner));
-      if (amount > 0n) ixs.push(ix.deposit(owner, amount));
-      ixs.push(ix.setSession(owner, session.publicKey, expires), ix.delegatePlayer(owner));
-      setBusy(amount > 0n ? `Depositing ${(Number(amount) / 1e6).toFixed(2)} USDC…` : "Moving your account into the rollup…");
-      await send(base, ixs);
-    } else if (current === "session") {
+      if (!ata) ixs.push(createAtaIdempotent(owner, owner));
+      if (!info) ixs.push(ix.initPlayer(owner));
+      if (!ledger) ixs.push(ix.initLedger(owner));
+      if (!tokens || tokens.delegate !== VAULT_HEX || tokens.delegated < ALLOWANCE_FLOOR) ixs.push(ix.approveVault(owner, WALLET_ALLOWANCE));
+      if (!info || info.owner.equals(PROGRAM_ID)) ixs.push(ix.setSession(owner, session.publicKey, expires), ix.delegatePlayer(owner));
+      setBusy("Connecting your wallet to the game…");
+      if (ixs.length) await send(base, ixs);
+      for (let i = 0; i < 40 && (await check()) === "setup"; i++) await sleep(750);
+    }
+    if ((await check()) === "session") {
       const session = sessionKey(owner, true)!;
       setBusy("Authorising this browser to tap…");
       await send(er, [ix.setSession(owner, session.publicKey, expires)]);
     }
     for (let i = 0; i < 40 && (await check()) !== "ready"; i++) await sleep(750);
-  }), [run, check, readWalletUsdc]);
+  }), [run, check, readWallet]);
 
-  /** Takes the account off the rollup and withdraws its whole balance to the wallet. */
-  const cashOut = useCallback(() => run("Closing your session on the rollup…", async () => {
+  /** Moves a balance left in the old deposit-based game account back to the wallet. */
+  const withdrawLegacy = useCallback(() => run("Closing your old game balance…", async () => {
     const owner = signerRef.current!.publicKey;
     await ensureFunded(false);
-    if ((await check()) !== "undelegated") {
-      await waitForOpenTaps();
-      setBusy("Closing your session on the rollup…");
+    const pda = playerPda(owner);
+    if (!(await base.getAccountInfo(pda))?.owner.equals(PROGRAM_ID)) {
+      for (let i = 0; i < 90; i++) {
+        const p = await er.getAccountInfo(pda);
+        if (!p || decodePlayer(p.data).taps.every((t) => !t.open)) break;
+        setBusy("Waiting for open taps to settle…");
+        await sleep(1000);
+      }
       await send(er, [ix.undelegatePlayer(owner)]);
       setBusy("Settling back to Solana…");
-      await waitForBase(false);
+      for (let i = 0; i < 60 && !(await base.getAccountInfo(pda))?.owner.equals(PROGRAM_ID); i++) await sleep(750);
     }
-    const info = await base.getAccountInfo(playerPda(owner));
-    const balance = info ? decodePlayer(info.data).balance : 0n;
+    const balance = decodePlayer((await base.getAccountInfo(pda))!.data).balance;
     if (balance > 0n) {
-      setBusy(`Withdrawing ${(Number(balance) / 1e6).toFixed(2)} USDC…`);
+      setBusy(`Moving ${(Number(balance) / 1e6).toFixed(2)} USDC to your wallet…`);
       await send(base, [ix.withdraw(owner, balance)]);
     }
-  }), [run, check]);
+    setLegacyBalance(0n);
+  }), [run]);
 
-  /** Tops the game balance up with whatever devnet USDC is in the wallet. */
-  const addFunds = useCallback(() => run("Closing your session on the rollup…", async () => {
-    const owner = signerRef.current!.publicKey;
-    const amount = await readWalletUsdc();
-    if (amount === 0n) throw new Error("No devnet USDC in this wallet to add (faucet.circle.com, Solana Devnet)");
-    await ensureFunded(false);
-    if ((await check()) !== "undelegated") {
-      await waitForOpenTaps();
-      setBusy("Closing your session on the rollup…");
-      await send(er, [ix.undelegatePlayer(owner)]);
-      setBusy("Settling back to Solana…");
-      await waitForBase(false);
-    }
-    const session = sessionKey(owner, true)!;
-    setBusy(`Depositing ${(Number(amount) / 1e6).toFixed(2)} USDC…`);
-    await send(base, [
-      ix.deposit(owner, amount),
-      ix.setSession(owner, session.publicKey, Math.floor(Date.now() / 1000) + SESSION_SECONDS),
-      ix.delegatePlayer(owner),
-    ]);
-    await waitForBase(true);
-    for (let i = 0; i < 40 && (await check()) !== "ready"; i++) await sleep(750);
-  }), [run, check, readWalletUsdc]);
-
-  return { stage, busy, error, walletUsdc, activate, cashOut, addFunds, recheck: check };
+  return { stage, busy, error, walletUsdc, collected, legacyBalance, activate, withdrawLegacy, recheck: check, refreshWallet: readWallet };
 }
