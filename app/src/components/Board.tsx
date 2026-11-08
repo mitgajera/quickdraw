@@ -30,7 +30,7 @@ interface Props {
   /** Tapped while the player cannot tap yet (not connected or not set up). */
   onBlocked?: () => void;
   /** Tapped a box the house does not offer right now. */
-  onReject?: (reason: "locked" | "too-far" | "unpriced" | "range" | "limit", side: "near" | "far") => void;
+  onReject?: (reason: "locked" | "too-far" | "unpriced" | "range" | "limit" | "column", side: "near" | "far") => void;
 }
 
 export function Board({ model, stake, canTap, onTap, onReject, onBlocked }: Props) {
@@ -67,6 +67,13 @@ export function Board({ model, stake, canTap, onTap, onReject, onBlocked }: Prop
       const t = L.rt + (x - L.nowX) / L.pps;
       return { k: Math.floor(t / L.col), j: Math.floor(pOfY(y) / L.band) };
     };
+    /** Columns (of this market) where you already have an open or in-flight tap. */
+    const takenColumns = () => {
+      const col = model.market?.colSecs ?? 4, out = new Set<number>();
+      for (const t of model.player?.taps ?? []) if (t.open && t.market.equals(model.keys.market)) out.add(Math.floor(t.start / col));
+      for (const p of model.pending) out.add(p.column);
+      return out;
+    };
     const quoteAt = (k: number, j: number) => {
       const { market, book, price, publishTime, candles } = model;
       if (!market || !book || price === null) return null;
@@ -93,6 +100,10 @@ export function Board({ model, stake, canTap, onTap, onReject, onBlocked }: Prop
       const r = cvs.getBoundingClientRect(), c = cellAt(e.clientX - r.left, e.clientY - r.top);
       if (!c) return;
       if (!props.current.canTap) { props.current.onBlocked?.(); return; }
+      if (takenColumns().has(c.k)) {
+        props.current.onReject?.("column", "far");
+        return;
+      }
       const q = quoteAt(c.k, c.j);
       if (!q) return;
       if (!q.ok) {
@@ -166,6 +177,7 @@ export function Board({ model, stake, canTap, onTap, onReject, onBlocked }: Prop
       const fs = clamp(rowPx * 0.3, 11, 14);
       ctx.font = `500 ${fs}px ${monoFont}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
       const stakeUnits = BigInt(Math.round(props.current.stake * 1e6));
+      const taken = takenColumns();
       for (let k = kNow; k <= kMax; k++) {
         const x0 = Math.max(xOf(k * col), nowX), x1 = xOf((k + 1) * col);
         if (x1 <= nowX) continue;
@@ -175,6 +187,11 @@ export function Board({ model, stake, canTap, onTap, onReject, onBlocked }: Prop
           const q = quoteBox(book, box, price, model.publishTime, sigma, stakeUnits);
           // rows hidden under the column-countdown strip get no label (it would show cut in half)
           const labelled = y0 + h / 2 > 30;
+          if (taken.has(k)) {
+            // one box per column: the rest of a column you already tapped is out of play
+            if (q.ok && labelled) { ctx.fillStyle = rgba(T.mute, 0.3); ctx.fillText(fmtMult(q.multBps), x0 + w / 2, y0 + h / 2 + 0.5); }
+            continue;
+          }
           const n = heat.get(`${k}:${box.lo}`) ?? 0;
           if (n) { ctx.fillStyle = rgba(T.accent, Math.min(0.16, n * 0.04)); ctx.fillRect(x0, y0, w, h); }
           if (!q.ok && q.reason === "limit") {
