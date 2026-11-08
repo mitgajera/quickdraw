@@ -157,6 +157,7 @@ export function Game() {
     say(reason === "locked" ? "That column is about to open — tap one further right"
       : reason === "too-far" ? "That column is more than two minutes out"
       : reason === "limit" ? "Over the house's limit at this stake — lower the stake or pick a lower multiplier"
+      : reason === "column" ? "One box per column — you already have a tap in this one"
       : side === "near" ? "Too close to call — no payout offered on that box"
       : "Beyond the house's top multiplier — pick a box closer to the price");
   }, [say]);
@@ -356,10 +357,10 @@ export function Game() {
 function CopyAddress({ address }: { address: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <button className="btn addr" title="Copy your wallet address" onClick={() => {
+    <button className="addr" title="Copy your wallet address" onClick={() => {
       void navigator.clipboard?.writeText(address).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
     }}>
-      <span className="mono nowrap">{copied ? "Copied" : short(address)}</span>
+      <span className="mono nowrap">{short(address)}</span><span className="addr-hint">{copied ? "Copied" : "Copy"}</span>
     </button>
   );
 }
@@ -373,6 +374,15 @@ function WalletButton(props: {
 }) {
   const { signer, busy, walletUsdc, canManage } = props;
   const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("pointerdown", onDown);
+    window.addEventListener("keydown", onKey);
+    return () => { window.removeEventListener("pointerdown", onDown); window.removeEventListener("keydown", onKey); };
+  }, [open]);
   if (!props.ready) return <button className="btn" disabled>Loading…</button>;
   if (!props.authenticated) return <button className="btn primary" onClick={props.onSignIn}>Sign in</button>;
   if (!signer) {
@@ -384,23 +394,35 @@ function WalletButton(props: {
   const address = signer.publicKey.toBase58();
   const initial = (props.name ?? address).slice(0, 1).toUpperCase();
   return (
-    <div style={{ position: "relative" }}>
-      <button className="walletpill" onClick={() => setOpen(!open)} aria-expanded={open} aria-label="Wallet and account">
+    <div className="acct" ref={ref}>
+      <button className="walletpill" onClick={() => setOpen(!open)} aria-expanded={open} aria-haspopup="menu" aria-label="Wallet and account">
         <span className="lbl">{busy && canManage ? busy : "Wallet"}</span>
         <b>{props.available === null ? "—" : usd(props.available)}</b>
         <span className="avatar" aria-hidden="true">{initial}</span>
       </button>
       {open && (
-        <div className="card menu">
-          <p className="lbl">{props.name ?? "Your Solana wallet"}</p>
-          <CopyAddress address={address} />
-          <a className="btn" href="/profile">Profile, deposit &amp; withdraw</a>
-          <p className="lbl">{usd(walletUsdc)} devnet USDC · always in your wallet</p>
-          {canManage && props.legacyBalance > 0n && (
-            <button className="btn" onClick={act(props.onWithdrawLegacy)}>Move old game balance ({usd(props.legacyBalance)}) to wallet</button>
-          )}
-          <a className="btn" href="https://faucet.circle.com/" target="_blank" rel="noreferrer">Get devnet USDC ↗</a>
-          <button className="btn" onClick={act(props.onSignOut)}>Sign out</button>
+        <div className="card menu" role="menu">
+          <div className="menu-head">
+            <span className="avatar lg" aria-hidden="true">{initial}</span>
+            <div className="menu-id">
+              <b>{props.name ?? "Your wallet"}</b>
+              <CopyAddress address={address} />
+            </div>
+          </div>
+          <div className="menu-bal">
+            <span className="lbl">Wallet balance</span>
+            <b>{usd(walletUsdc)}</b>
+            <span className="lbl">devnet USDC · stays in your wallet</span>
+          </div>
+          <div className="menu-list">
+            <a role="menuitem" href="/profile"><span>Profile &amp; history</span><span className="chev">›</span></a>
+            <a role="menuitem" href="/profile"><span>Deposit or withdraw</span><span className="chev">›</span></a>
+            <a role="menuitem" href="https://faucet.circle.com/" target="_blank" rel="noreferrer"><span>Get devnet USDC</span><span className="chev">↗</span></a>
+            {canManage && props.legacyBalance > 0n && (
+              <button role="menuitem" onClick={act(props.onWithdrawLegacy)}><span>Move old balance ({usd(props.legacyBalance)})</span><span className="chev">›</span></button>
+            )}
+          </div>
+          <button role="menuitem" className="menu-out" onClick={act(props.onSignOut)}>Sign out</button>
         </div>
       )}
     </div>

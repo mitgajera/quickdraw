@@ -265,3 +265,56 @@ a.lat:hover { color: var(--ink); }
 .tiles b { font-family: var(--font-mono), monospace; font-size: 20px; font-weight: 500; }
 .tiles .win { color: var(--win); } .tiles .loss { color: var(--loss); }
 @media (max-width: 960px) { .profile { grid-template-columns: 1fr; } }
+
+/* ---------- fit the screen on desktop: the page never scrolls, lists scroll inside their cards ---------- */
+* { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--faint); background-clip: padding-box; }
+::-webkit-scrollbar-track { background: transparent; }
+.h3.sep { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
+.wform { display: flex; flex-direction: column; gap: 10px; }
+.card.pad > .copyrow + .btn, .card.pad > p + .copyrow { margin-top: 10px; }
+.btn.block + .btn, .copyrow + .btn.block { margin-top: 10px; }
+.rk { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.receipts { display: flex; flex-direction: column; }
+@media (min-width: 961px) {
+  .app { height: 100vh; display: flex; flex-direction: column; padding-bottom: 18px; overflow: hidden; }
+  .top { flex: none; }
+  .main { flex: 1; min-height: 0; align-items: stretch; }
+  .boardcard { display: flex; flex-direction: column; min-height: 0; }
+  .boardwrap { flex: 1; min-height: 0; }
+  .boardwrap canvas { height: 100%; min-height: 0; }
+  .side { min-height: 0; }
+  .side > .card:last-child { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .tabbody { flex: 1; min-height: 0; max-height: none; overflow-y: auto; }
+  .profile { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr); align-items: stretch; }
+  .pcol { display: flex; flex-direction: column; gap: 18px; min-height: 0; overflow-y: auto; }
+  .receipts { min-height: 0; }
+  .receipts .scroll { flex: 1; min-height: 0; overflow-y: auto; margin-right: -8px; padding-right: 8px; }
+}
+@media (max-width: 960px) {
+  .pcol { display: flex; flex-direction: column; gap: 18px; }
+}
+.copyrow > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.copyrow > span:last-child { flex: none; white-space: nowrap; }
+
+/* account menu */
+.acct { position: relative; }
+.menu { width: 300px; padding: 0; gap: 0; overflow: hidden; animation: in .15s cubic-bezier(0,0,.2,1); }
+.menu-head { display: flex; align-items: center; gap: 12px; padding: 16px; }
+.menu-id { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.menu-id b { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.addr { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--mute); padding: 0; }
+.addr:hover { color: var(--ink); }
+.addr-hint { font-family: var(--font-sans), sans-serif; font-size: 11px; color: var(--faint); }
+.menu-bal { display: flex; flex-direction: column; gap: 3px; padding: 14px 16px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--soft); }
+.menu-bal b { font-family: var(--font-mono), monospace; font-size: 22px; font-weight: 500; letter-spacing: -0.02em; }
+.menu-list { display: flex; flex-direction: column; padding: 6px; }
+.menu-list a, .menu-list button { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px; border-radius: 9px;
+  font-size: 13.5px; font-weight: 500; text-decoration: none; text-align: left; transition: background-color .1s; }
+.menu-list a:hover, .menu-list button:hover { background: var(--soft); }
+.menu-list .chev { color: var(--faint); }
+.menu-out { display: block; width: 100%; text-align: left; padding: 12px 16px; border-top: 1px solid var(--line); font-size: 13.5px; font-weight: 500; color: var(--mute); }
+.menu-out:hover { color: var(--loss); background: var(--soft); }
+.onboard .addr, .row .addr { padding: 10px 14px; border: 1px solid var(--line); border-radius: 11px; }
