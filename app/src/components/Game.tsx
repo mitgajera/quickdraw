@@ -347,7 +347,10 @@ function Onboarding(props: {
         {!props.authenticated && (
           <>
             <h2>Fastest tap wins.</h2>
-            <p>Tap a box. If the price touches it before its column closes, you win the multiplier — priced and settled on-chain, taps land in ~150ms on a MagicBlock rollup. Plays with devnet USDC; we cover every fee.</p>
+            <p>
+              <span className="hide-sm">Tap a box. If the price touches it before its column closes, you win the multiplier — priced and settled on-chain, taps land in ~150ms on a MagicBlock rollup. Plays with devnet USDC; we cover every fee.</span>
+              <span className="show-sm">Tap the box the price will hit before its column closes. Priced on-chain, no fees, no popups.</span>
+            </p>
             <div className="row">
               <button className="btn primary" disabled={!props.ready} onClick={props.onSignIn}>{props.ready ? "Sign in with Google or X" : "Loading…"}</button>
             </div>

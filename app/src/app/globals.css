@@ -105,6 +105,7 @@ a.btn { text-decoration: none; display: inline-block; }
 }
 .overlay .onboard { pointer-events: auto; box-shadow: 0 12px 40px rgba(0,0,0,.35); }
 .connect-top { display: flex; gap: 6px; }
+.show-sm { display: none; }
 .side { display: flex; flex-direction: column; gap: 14px; }
 .card { border: 1px solid var(--line); background: var(--panel); border-radius: var(--card-radius); padding: 14px; }
 .card-h {
@@ -169,13 +170,20 @@ a.btn { text-decoration: none; display: inline-block; }
 @media (max-width: 600px) {
   .app { padding-bottom: 150px; }
   .hide-sm { display: none; }
+  .show-sm { display: inline; }
   .top .btn { padding: 8px 10px; }
   .top { gap: 8px; flex-wrap: wrap; }
   .mkts { order: 3; width: 100%; margin-left: 0; }
   .mkts .mkt { flex: 1; text-align: center; }
-  .overlay { right: 0; padding: 10px; }
+  /* sign-in and setup sit as a sheet above the stake dock, leaving the board visible */
+  .overlay { position: fixed; left: 8px; right: 8px; bottom: 132px; padding: 0; z-index: 16; }
+  .onboard { padding: 14px; }
+  .onboard h2 { font-size: 17px; }
+  .onboard p { font-size: 13px; margin-bottom: 10px; }
   .connect-top .btn { padding: 8px 10px; font-size: 12px; }
-  .word { font-size: 15px; }
+  .word { display: none; }
+  .top { row-gap: 10px; }
+  .iconbtn { width: 34px; height: 34px; }
   .bal b { font-size: 13px; }
   .hero { padding-bottom: 10px; }
   .dock {
