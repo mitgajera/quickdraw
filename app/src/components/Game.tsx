@@ -1,15 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { useWallet } from "@solana/wallet-adapter-react";
-import { WalletReadyState } from "@solana/wallet-adapter-base";
 import { ComputeBudgetProgram, Transaction } from "@solana/web3.js";
 import { ER_RPC, PROGRAM_ID, explainError, ix, playerPda, rowHeight, sendSigned, type Symbol } from "@quickdraw/sdk";
 import type { PublicKey } from "@solana/web3.js";
 import { Board } from "./Board";
-import { useAccount, type Stage } from "@/lib/account";
+import { NEEDS_USDC, useAccount, type Stage } from "@/lib/account";
 import { erBlockhash, er, prefs, sessionKey, type AppSigner } from "@/lib/chain";
 import { LiveModel, type Result } from "@/lib/live";
+import { usePrivySigner } from "@/lib/privy";
 import { sound } from "@/lib/sound";
 
 const SYMBOLS: Symbol[] = ["SOL", "BTC", "ETH"];
@@ -23,13 +22,8 @@ const usd = (v: bigint | number) => {
 const short = (s: string) => `${s.slice(0, 4)}…${s.slice(-3)}`;
 
 export function Game() {
-  const wallet = useWallet();
-  const signer = useMemo<AppSigner | null>(() => {
-    if (wallet.publicKey && wallet.signTransaction) {
-      return { kind: "wallet", publicKey: wallet.publicKey, signTransaction: wallet.signTransaction };
-    }
-    return null;
-  }, [wallet.publicKey, wallet.signTransaction]);
+  const auth = usePrivySigner();
+  const signer = auth.signer;
 
   const [symbol, setSymbol] = useState<Symbol>("SOL");
   const model = useMemo(() => new LiveModel(symbol), [symbol]);
@@ -113,24 +107,27 @@ export function Game() {
       : "Beyond the house's top multiplier — pick a box closer to the price");
   }, [say]);
 
-  const connectWallet = async (name: string) => {
-    try {
-      wallet.select(name as Parameters<typeof wallet.select>[0]);
-    } catch (e) { say(explainError(e), true); }
-  };
-  useEffect(() => {
-    if (wallet.wallet && !wallet.connected && !wallet.connecting) wallet.connect().catch(() => {});
-  }, [wallet]);
+  const signIn = () => auth.login();
+  const signOut = async () => { await auth.logout(); };
 
-  const disconnect = async () => { await wallet.disconnect(); };
+  // the embedded wallet signs silently, so setup runs by itself once per wallet and stage; a failure
+  // stops the loop and leaves a retry button on the card
+  const attempted = useRef("");
+  useEffect(() => {
+    const st = account.stage;
+    if (!signer || account.busy || !(st === "new" || st === "undelegated" || st === "session")) return;
+    const key = `${signer.publicKey.toBase58()}:${st}`;
+    if (attempted.current === key) return;
+    attempted.current = key;
+    void account.activate();
+  }, [signer, account.stage, account.busy, account.activate]);
   // account errors outside the onboarding card (cash out, add funds) surface as toasts
   useEffect(() => { if (account.error && account.stage === "ready") say(account.error, true); }, [account.error, account.stage, say]);
 
-  const detected = wallet.wallets.filter((w) => w.readyState === WalletReadyState.Installed || w.readyState === WalletReadyState.Loadable);
-  const walletNames = detected.map((w) => w.adapter.name);
+  const { login } = auth;
   const onBlocked = useCallback(() => {
-    say(account.stage === "disconnected" ? "Connect a wallet to tap" : "Finish setting up your account to tap");
-  }, [account.stage, say]);
+    if (account.stage === "disconnected") { say("Sign in to tap"); login(); } else say("Setting up your account…");
+  }, [account.stage, say, login]);
 
   return (
     <main className="app">
@@ -158,9 +155,9 @@ export function Game() {
             <ThemeIcon dark={theme === "dark"} />
           </button>
           <WalletButton
-            signer={signer} busy={account.busy} walletUsdc={account.walletUsdc} canManage={account.stage === "ready"}
-            wallets={walletNames} onWallet={connectWallet}
-            onDisconnect={disconnect} onCashOut={account.cashOut} onAddFunds={account.addFunds}
+            signer={signer} name={auth.name} ready={auth.ready} authenticated={auth.authenticated}
+            busy={account.busy} walletUsdc={account.walletUsdc} canManage={account.stage === "ready"}
+            onSignIn={signIn} onSignOut={signOut} onCashOut={account.cashOut} onAddFunds={account.addFunds}
           />
         </div>
       </header>
@@ -186,8 +183,8 @@ export function Game() {
           )}
           {account.stage !== "ready" && (
             <Onboarding
-              stage={account.stage} busy={account.busy} error={account.error} wallets={walletNames}
-              walletUsdc={account.walletUsdc} onWallet={connectWallet} onActivate={account.activate} onRecheck={account.recheck}
+              stage={account.stage} busy={account.busy} error={account.error} ready={auth.ready} authenticated={auth.authenticated}
+              address={signer?.publicKey.toBase58() ?? null} onSignIn={signIn} onActivate={account.activate}
             />
           )}
         </div>
@@ -257,104 +254,89 @@ export function Game() {
   );
 }
 
-/** Phone browsers have no wallet extension: open this page inside Phantom's in-app browser instead. */
-function phantomBrowseLink() {
-  if (typeof window === "undefined") return "https://phantom.com/download";
-  const url = encodeURIComponent(window.location.href);
-  return `https://phantom.app/ul/browse/${url}?ref=${encodeURIComponent(window.location.origin)}`;
-}
-const isPhone = () => typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-
-/** "Connect Phantom" when a wallet is installed, otherwise open-in-Phantom (phones) or install (desktop). */
-function ConnectAction({ wallets, onWallet, primary = true }: { wallets: string[]; onWallet: (name: string) => void; primary?: boolean }) {
-  const cls = `btn${primary ? " primary" : ""}`;
-  const [phone, setPhone] = useState(false);
-  useEffect(() => setPhone(isPhone()), []);
-  if (wallets.length > 0) {
-    return <>{wallets.slice(0, 2).map((w) => <button key={w} className={cls} onClick={() => onWallet(w)}>Connect {w}</button>)}</>;
-  }
-  return phone
-    ? <a className={cls} href={phantomBrowseLink()}>Open in Phantom ↗</a>
-    : <a className={cls} href="https://phantom.com/download" target="_blank" rel="noreferrer">Install Phantom ↗</a>;
+function CopyAddress({ address }: { address: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button className="btn addr" title="Copy your wallet address" onClick={() => {
+      void navigator.clipboard?.writeText(address).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
+    }}>
+      <span className="mono nowrap">{copied ? "Copied" : short(address)}</span>
+    </button>
+  );
 }
 
 function WalletButton(props: {
-  signer: AppSigner | null; busy: string | null; walletUsdc: bigint; canManage: boolean;
-  wallets: string[]; onWallet: (name: string) => void;
-  onDisconnect: () => void; onCashOut: () => void; onAddFunds: () => void;
+  signer: AppSigner | null; name: string | null; ready: boolean; authenticated: boolean;
+  busy: string | null; walletUsdc: bigint; canManage: boolean;
+  onSignIn: () => void; onSignOut: () => void; onCashOut: () => void; onAddFunds: () => void;
 }) {
   const { signer, busy, walletUsdc, canManage } = props;
   const [open, setOpen] = useState(false);
-  if (!signer) return <div className="connect-top"><ConnectAction wallets={props.wallets} onWallet={props.onWallet} /></div>;
+  if (!props.ready) return <div className="connect-top"><button className="btn" disabled>Loading…</button></div>;
+  if (!props.authenticated) return <div className="connect-top"><button className="btn primary" onClick={props.onSignIn}>Sign in</button></div>;
+  if (!signer) return <div className="connect-top"><button className="btn" disabled>Creating wallet…</button></div>;
   const act = (fn: () => void) => () => { setOpen(false); fn(); };
+  const address = signer.publicKey.toBase58();
   return (
     <div style={{ position: "relative" }}>
       <button className="btn" onClick={() => setOpen(!open)} disabled={!!busy && canManage}>
-        <span className="mono nowrap">{busy && canManage ? busy : short(signer.publicKey.toBase58())}</span>
+        <span className="mono nowrap">{busy && canManage ? busy : props.name ?? short(address)}</span>
       </button>
       {open && (
         <div className="card menu">
+          <p className="lbl">Your Solana wallet</p>
+          <CopyAddress address={address} />
           <p className="lbl">In wallet: {usd(walletUsdc)} USDC</p>
           {canManage && <button className="btn" onClick={act(props.onAddFunds)} disabled={walletUsdc === 0n}>Add wallet USDC</button>}
           {canManage && <button className="btn" onClick={act(props.onCashOut)}>Cash out to wallet</button>}
           <a className="btn" href="https://faucet.circle.com/" target="_blank" rel="noreferrer">Get devnet USDC ↗</a>
-          <button className="btn" onClick={act(props.onDisconnect)}>Disconnect</button>
+          <button className="btn" onClick={act(props.onSignOut)}>Sign out</button>
         </div>
       )}
     </div>
   );
 }
 
-const STEPS: { stage: Stage[]; text: string }[] = [
-  { stage: ["new", "undelegated"], text: "Deposit your devnet USDC into the game" },
-  { stage: ["new", "undelegated"], text: "Open your account on the MagicBlock rollup" },
-  { stage: ["new", "undelegated", "session"], text: "Authorise this browser to tap without popups for 24h" },
-];
-
 function Onboarding(props: {
-  stage: Stage; busy: string | null; error: string | null; wallets: string[]; walletUsdc: bigint;
-  onWallet: (name: string) => void; onActivate: () => void; onRecheck: () => void;
+  stage: Stage; busy: string | null; error: string | null; ready: boolean; authenticated: boolean;
+  address: string | null; onSignIn: () => void; onActivate: () => void;
 }) {
-  const { stage, busy, error, wallets, walletUsdc } = props;
-  const needsUsdc = stage === "new" && walletUsdc === 0n;
+  const { stage, busy, error, address } = props;
+  const needsUsdc = error === NEEDS_USDC;
   return (
     <div className="overlay">
       <div className="onboard">
-        {stage === "disconnected" && (
+        {!props.authenticated && (
           <>
             <h2>Fastest tap wins.</h2>
-            <p>Tap a box. If the price touches it before its column closes, you win the multiplier — priced and settled on-chain, taps land in ~150ms on a MagicBlock rollup. Plays with devnet USDC.</p>
+            <p>Tap a box. If the price touches it before its column closes, you win the multiplier — priced and settled on-chain, taps land in ~150ms on a MagicBlock rollup. Plays with devnet USDC; we cover every fee.</p>
             <div className="row">
-              <ConnectAction wallets={wallets} onWallet={props.onWallet} />
+              <button className="btn primary" disabled={!props.ready} onClick={props.onSignIn}>{props.ready ? "Sign in with Google or X" : "Loading…"}</button>
             </div>
           </>
         )}
-        {stage === "checking" && <p>Checking your account…</p>}
-        {needsUsdc && (
+        {props.authenticated && !address && <p>Creating your wallet…</p>}
+        {address && needsUsdc && !busy && (
           <>
-            <h2>Get devnet USDC</h2>
-            <p>Quickdraw plays with Circle&apos;s devnet USDC. Claim 20 free at the faucet: pick <b>USDC</b> and <b>Solana Devnet</b>, paste your wallet address, then come back.</p>
+            <h2>Add devnet USDC</h2>
+            <p>Starter USDC has run out for now. Claim 20 free at Circle&apos;s faucet: pick <b>USDC</b> and <b>Solana Devnet</b>, paste your address, then come back.</p>
             <div className="row">
-              <a className="btn primary" href="https://faucet.circle.com/" target="_blank" rel="noreferrer">Open Circle faucet ↗</a>
-              <button className="btn" onClick={props.onRecheck}>I have USDC</button>
+              <CopyAddress address={address} />
+              <a className="btn" href="https://faucet.circle.com/" target="_blank" rel="noreferrer">Open faucet ↗</a>
+              <button className="btn primary" onClick={props.onActivate}>I have USDC</button>
             </div>
           </>
         )}
-        {!needsUsdc && (stage === "new" || stage === "undelegated" || stage === "session") && (
+        {address && !needsUsdc && (
           <>
-            <h2>{stage === "new" ? "One signature to start" : stage === "undelegated" ? "Resume playing" : "Authorise this browser"}</h2>
-            {stage !== "session" && <p>{walletUsdc > 0n ? `${usd(walletUsdc)} USDC in your wallet will be deposited.` : "Your game balance moves back into the rollup."}</p>}
-            <ul className="steps">
-              {STEPS.map((s, i) => (
-                <li key={s.text}><span className="n">0{i + 1}</span><span className={s.stage.includes(stage) ? "" : "done"}>{s.text}</span></li>
-              ))}
-            </ul>
-            <button className="btn primary" disabled={!!busy} onClick={props.onActivate}>
-              {busy ?? (stage === "new" ? "Deposit and play" : stage === "undelegated" ? "Resume" : "Authorise")}
-            </button>
+            <h2>{busy ? "Setting you up" : stage === "checking" ? "Checking your account" : "Almost there"}</h2>
+            <p>{busy ?? (stage === "checking" ? "One moment…" : "Your account opens on the MagicBlock rollup. No popups, no fees.")}</p>
+            {!busy && stage !== "checking" && (
+              <div className="row"><button className="btn primary" onClick={props.onActivate}>{error ? "Try again" : "Start playing"}</button></div>
+            )}
           </>
         )}
-        {error && <p className="err">{error}</p>}
+        {error && !needsUsdc && <p className="err">{error}</p>}
       </div>
     </div>
   );
