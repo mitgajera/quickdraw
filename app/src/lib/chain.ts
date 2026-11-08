@@ -7,19 +7,33 @@ import { BASE_RPC, ER_RPC } from "@quickdraw/sdk";
  * JSON-RPC reads and sends are safe to repeat (a resent transaction has the same signature).
  */
 const RETRIES = 4;
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_RPC || BASE_RPC;
+/**
+ * A configured RPC (e.g. a Helius key) can run out of credits or rate-limit; when it does, fall back
+ * to the public endpoint at once and give the configured one another try a minute later.
+ */
+const FALLBACK: Record<string, string> = BASE_URL !== BASE_RPC ? { [BASE_URL]: BASE_RPC } : {};
+const COOL_DOWN_MS = 60_000;
+const downUntil: Record<string, number> = {};
 const retryingFetch: typeof fetch = async (input, init) => {
+  const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
   for (let i = 0; ; i++) {
+    const backup = FALLBACK[url];
+    const target = backup && (downUntil[url] ?? 0) > Date.now() ? backup : url;
     try {
-      const res = await fetch(input, init);
-      if ((res.status !== 429 && res.status < 500) || i >= RETRIES) return res;
+      const res = await fetch(target, init);
+      // a bad or revoked key (401/403) is worth falling back from, not worth retrying
+      const keyProblem = (res.status === 401 || res.status === 403) && target === url && !!backup;
+      if ((res.status !== 429 && res.status < 500 && !keyProblem) || i >= RETRIES) return res;
     } catch (e) {
       if (i >= RETRIES) throw e;
     }
+    if (target === url && backup) { downUntil[url] = Date.now() + COOL_DOWN_MS; continue; } // switch now, no wait
     await new Promise((r) => setTimeout(r, 250 * 2 ** i + Math.random() * 200));
   }
 };
 
-export const base = new Connection(process.env.NEXT_PUBLIC_BASE_RPC ?? BASE_RPC, { commitment: "confirmed", fetch: retryingFetch });
+export const base = new Connection(BASE_URL, { commitment: "confirmed", fetch: retryingFetch });
 export const er = new Connection(process.env.NEXT_PUBLIC_ER_RPC ?? ER_RPC, { commitment: "confirmed", fetch: retryingFetch });
 export const KEEPER_URL = process.env.NEXT_PUBLIC_KEEPER_URL ?? "http://localhost:8787";
 
