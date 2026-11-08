@@ -158,9 +158,14 @@ export function Profile() {
               : <a className="btn primary block" href="/">Turn on in the game</a>}
             {account.busy && <p className="muted small">{account.busy}</p>}
           </section>
+          <section className="card pad">
+            <h3 className="h3">Responsible play</h3>
+            <p className="muted">Pause tapping in this browser once a session is down this much. A session starts when you open the game.</p>
+            <LossLimit />
+          </section>
         </div>
 
-        <div className="pcol">
+        <div className="pcol last">
           <section className="card pad">
             <h3 className="h3">Achievements</h3>
             <div className="badges">
@@ -173,13 +178,6 @@ export function Profile() {
               ))}
             </div>
           </section>
-          <section className="card pad">
-            <h3 className="h3">Responsible play</h3>
-            <p className="muted">Pause tapping in this browser once a session is down this much. A session starts when you open the game.</p>
-            <LossLimit />
-          </section>
-        </div>
-
         <section className="card pad receipts">
           <div className="h3row"><h3 className="h3">On-chain receipts</h3><button className="linkbtn" onClick={() => void refresh()}>Refresh</button></div>
           <p className="muted small">Every USDC movement on your wallet, read from Solana devnet.</p>
@@ -196,6 +194,7 @@ export function Profile() {
             </ul>
           )}
         </section>
+        </div>
       </div>
     </Shell>
   );
