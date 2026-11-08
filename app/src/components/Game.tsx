@@ -277,8 +277,8 @@ export function Game() {
           {showOnboarding && <div className="side-onboard">{onboarding}</div>}
           {player && <Positions model={model} onProof={setProof} />}
           <div className="card">
-            <div className="card-h"><span>Live taps</span><span>{model.online} trading</span></div>
-            {model.feed.length === 0 ? <p className="empty">Waiting for the first tap…</p> : (
+            <div className="card-h"><span>Live taps</span><span>{model.online} in play</span></div>
+            {model.feed.length === 0 ? <p className="empty">New taps from every player land here live.</p> : (
               <ul className="list">
                 {model.feed.map((f) => (
                   <li key={f.id}><span className={`who${f.me ? " me" : ""}`}>{f.who}</span><span className={`mono ${f.tone}`}>{f.text}</span></li>
