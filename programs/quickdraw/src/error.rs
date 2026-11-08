@@ -40,4 +40,10 @@ pub enum QuickdrawError {
     LiquidityLocked,
     #[msg("Only devnet USDC is accepted")]
     WrongMint,
+    #[msg("Not enough USDC in the wallet for this stake")]
+    WalletTooLow,
+    #[msg("Approve Quickdraw to spend your USDC first")]
+    AllowanceTooLow,
+    #[msg("Only a Quickdraw Magic Action may call this")]
+    NotMagicAction,
 }

@@ -6,6 +6,12 @@ pub const CANDLE_SLOTS: usize = 256;
 /// Open taps a player can hold at once.
 pub const MAX_TAPS: usize = 12;
 
+/// Set on the id of a tap paid for straight from the player's wallet (see `place_wallet_tap`).
+pub const WALLET_TAP_FLAG: u32 = 1 << 31;
+
+/// Collected wallet-tap ids a ledger remembers (more than `MAX_TAPS` open taps can need).
+pub const LEDGER_RING: usize = 32;
+
 /// One tradable asset (SOL/USD, BTC/USD, ...), keyed by its oracle price account.
 /// The grid is fixed per market: rows are `band`-wide price bands, columns are `col_secs` long.
 #[account]
@@ -305,5 +311,32 @@ mod tests {
         c.record(100, 1_000);
         assert_eq!(c.last_price, 110);
         assert_eq!(c.range_at(1_000), Some((100, 100)));
+    }
+}
+
+/// Wallet play: the base-layer record of which wallet-tap stakes the house has collected from the
+/// player's own token account, and how much it has paid back. Never delegated, so the ER reads a
+/// live copy of it: a winning wallet tap only pays once its stake shows up here as collected.
+#[account]
+#[derive(InitSpace)]
+pub struct Ledger {
+    pub owner: Pubkey,
+    /// Ids (with `WALLET_TAP_FLAG`) of the most recent collected stakes, oldest overwritten first.
+    pub collected: [u32; LEDGER_RING],
+    pub head: u8,
+    pub collected_total: u64,
+    pub paid_total: u64,
+    pub bump: u8,
+}
+
+impl Ledger {
+    pub fn has_collected(&self, id: u32) -> bool {
+        id != 0 && self.collected.contains(&id)
+    }
+
+    pub fn push_collected(&mut self, id: u32) {
+        let i = self.head as usize % LEDGER_RING;
+        self.collected[i] = id;
+        self.head = ((i + 1) % LEDGER_RING) as u8;
     }
 }
