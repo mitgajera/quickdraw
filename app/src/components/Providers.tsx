@@ -1,16 +1,28 @@
 "use client";
 
-import { WalletProvider } from "@solana/wallet-adapter-react";
+import { PrivyProvider } from "@privy-io/react-auth";
 import { Buffer } from "buffer";
+import { PRIVY_APP_ID } from "@/lib/privy";
 
 // web3.js and the sdk expect a global Buffer in the browser
 if (typeof window !== "undefined") (window as unknown as { Buffer: typeof Buffer }).Buffer ??= Buffer;
 
-/** Phantom and other Wallet Standard wallets register themselves; no adapters to list. */
+/** Privy: sign in with Google or X; every player gets an embedded Solana wallet that signs silently. */
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <WalletProvider wallets={[]} autoConnect>
+    <PrivyProvider
+      appId={PRIVY_APP_ID}
+      config={{
+        loginMethods: ["google", "twitter"],
+        appearance: { theme: "dark", accentColor: "#FFB224", walletChainType: "solana-only", landingHeader: "Sign in to Quickdraw" },
+        embeddedWallets: {
+          ethereum: { createOnLogin: "off" },
+          solana: { createOnLogin: "all-users" },
+          showWalletUIs: false,
+        },
+      }}
+    >
       {children}
-    </WalletProvider>
+    </PrivyProvider>
   );
 }

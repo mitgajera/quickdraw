@@ -12,7 +12,7 @@ export async function erBlockhash(): Promise<string> {
   return cachedHash.value;
 }
 
-/** The connected browser wallet (Phantom or any Wallet Standard wallet). */
+/** The signed-in player's Privy embedded wallet, which signs without popups. */
 export interface AppSigner {
   kind: "wallet";
   publicKey: PublicKey;
