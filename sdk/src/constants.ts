@@ -27,8 +27,12 @@ export const TAP_LOCK_SECS = 1;
 export const MAX_AHEAD_SECS = 120;
 export const VOL_WINDOW_SECS = 30;
 /** Scales on the candle volatility estimate: drift before a column opens, wander inside it (lib.rs). */
-export const DRIFT_VOL_SCALE = 2.5;
+// Two pricing scenarios, as in lib.rs: every box pays on the likelier of jumpy and calm.
+export const DRIFT_VOL_SCALE = 1.5;
 export const WINDOW_VOL_SCALE = 1.0;
+export const CALM_DRIFT_VOL_SCALE = 0.8;
+export const CALM_WINDOW_VOL_SCALE = 0.6;
+export const CALM_FLOOR_RATIO = 0.5;
 export const MIN_VOL_SAMPLES = 5;
 /** Grid zoom: rows are `market.band << zoom`, zoom 0..MAX_ZOOM (lib.rs `MAX_ZOOM`). */
 export const MAX_ZOOM = 4;

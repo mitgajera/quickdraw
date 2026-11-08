@@ -53,10 +53,11 @@ test("quotes boxes like tap.rs", () => {
   const price = 8_998_000_000n, now = 1_000_001;
   const near = quoteBox(book, boxAt(market, 2251n, 250_002), price, now, 1_800_000);
   const far = quoteBox(book, boxAt(market, 2252n, 250_002), price, now, 1_800_000);
-  assert.ok(near.ok && near.multBps >= 34_500 && near.multBps < 38_500, JSON.stringify(near));
-  assert.ok(far.ok && far.multBps >= 45_000 && far.multBps < 50_000, JSON.stringify(far));
+  assert.ok(near.ok && near.multBps >= 31_000 && near.multBps < 32_200, JSON.stringify(near));
+  assert.ok(far.ok && far.multBps >= 57_500 && far.multBps < 60_000, JSON.stringify(far));
+  // the box holding the price, 3s out, is near-certain in the calm scenario: not offered
   const inside = quoteBox(book, boxAt(market, 2249n, 250_001), price, now, 1_800_000);
-  assert.ok(inside.ok && inside.multBps >= 19_500 && inside.multBps < 21_500, JSON.stringify(inside));
+  assert.deepEqual(inside, { ok: false, reason: "range" });
   assert.ok(Math.abs(windowTouchProbability(0n, 200n, 300n, 4, 4, 250, 100) - 0.28198) < 0.0015);
   assert.deepEqual(quoteBox(book, boxAt(market, 2251n, 250_000), price, now, 1_800_000), { ok: false, reason: "locked" });
   assert.deepEqual(quoteBox(book, boxAt(market, 2251n, 250_040), price, now, 1_800_000), { ok: false, reason: "too-far" });

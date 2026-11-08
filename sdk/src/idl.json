@@ -1455,6 +1455,10 @@
         {
           "name": "min_mult_bps",
           "type": "u32"
+        },
+        {
+          "name": "quoted_mult_bps",
+          "type": "u32"
         }
       ]
     },

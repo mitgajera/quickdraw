@@ -1,7 +1,7 @@
 // Mirror of the on-chain odds (window touch pricing) (programs/quickdraw/src/odds.rs, state.rs, instructions/tap.rs), so
 // the grid shows the multiplier the program will actually give.
 import type { Book, Candles, Market } from "./accounts";
-import { CANDLE_SLOTS, MAX_AHEAD_SECS, MIN_VOL_SAMPLES, ONE_X_BPS, TAP_LOCK_SECS, VOL_WINDOW_SECS, DRIFT_VOL_SCALE, WINDOW_VOL_SCALE, MAX_ZOOM } from "./constants";
+import { CALM_DRIFT_VOL_SCALE, CALM_FLOOR_RATIO, CALM_WINDOW_VOL_SCALE, CANDLE_SLOTS, MAX_AHEAD_SECS, MIN_VOL_SAMPLES, ONE_X_BPS, TAP_LOCK_SECS, VOL_WINDOW_SECS, DRIFT_VOL_SCALE, WINDOW_VOL_SCALE, MAX_ZOOM } from "./constants";
 
 /** Complementary error function (Numerical Recipes `erfcc`), same constants as the program. */
 function erfc(x: number): number {
@@ -95,9 +95,23 @@ export function sigmaFromCandles(c: Candles, now: number, window = VOL_WINDOW_SE
   return moves >= MIN_VOL_SAMPLES ? Math.sqrt(sum / moves) : null;
 }
 
-export function sigmaFor(market: Market, candles: Candles | null, now: number): number {
+/** Volatility for the two pricing scenarios (see `quoteBox`). A plain number means both. */
+export interface Sigma { jumpy: number; calm: number }
+const asSigma = (s: Sigma | number): Sigma => (typeof s === "number" ? { jumpy: s, calm: s * CALM_FLOOR_RATIO } : s);
+
+export function sigmaFor(market: Market, candles: Candles | null, now: number): Sigma {
   const est = candles ? sigmaFromCandles(candles, now) ?? 0 : 0;
-  return Math.max(est, Number(market.sigmaFloor));
+  const floor = Number(market.sigmaFloor);
+  return { jumpy: Math.max(est, floor), calm: Math.max(est, floor * CALM_FLOOR_RATIO) };
+}
+
+/** Same as `quote` in tap.rs: the likelier of the jumpy and calm scenarios. */
+export function boxProbability(box: Box, price: bigint, now: number, sigma: Sigma | number): number {
+  const s = asSigma(sigma), lead = box.start - now, w = box.end - box.start;
+  return Math.max(
+    windowTouchProbability(price, box.lo, box.hi, lead, w, s.jumpy * DRIFT_VOL_SCALE, s.jumpy * WINDOW_VOL_SCALE),
+    windowTouchProbability(price, box.lo, box.hi, lead, w, s.calm * CALM_DRIFT_VOL_SCALE, s.calm * CALM_WINDOW_VOL_SCALE),
+  );
 }
 
 export interface Box { bandIndex: bigint; column: number; zoom: number; lo: bigint; hi: bigint; start: number; end: number }
@@ -113,9 +127,8 @@ export function boxAt(market: Market, bandIndex: bigint, column: number, zoom = 
 }
 
 /** Raw multiplier (bps, before range limits) for a box, or Infinity when it cannot be hit. */
-function rawMultBps(book: Book, box: Box, price: bigint, now: number, sigma: number): number {
-  const p = windowTouchProbability(price, box.lo, box.hi, box.start - now, box.end - box.start,
-    sigma * DRIFT_VOL_SCALE, sigma * WINDOW_VOL_SCALE);
+function rawMultBps(book: Book, box: Box, price: bigint, now: number, sigma: Sigma | number): number {
+  const p = boxProbability(box, price, now, sigma);
   return p > 0 ? (ONE_X_BPS - book.edgeBps) / p : Infinity;
 }
 
@@ -123,7 +136,7 @@ function rawMultBps(book: Book, box: Box, price: bigint, now: number, sigma: num
  * The zoom whose grid shows a real gradient right now: the box three rows above the price, two
  * columns out, should pay about `targetX` (calm markets zoom in, busy markets zoom out).
  */
-export function idealZoom(market: Market, book: Book, price: bigint, now: number, sigma: number, targetX = 10): number {
+export function idealZoom(market: Market, book: Book, price: bigint, now: number, sigma: Sigma | number, targetX = 10): number {
   let best = 0, bestErr = Infinity;
   const column = Math.floor(now / market.colSecs) + 2;
   for (let z = 0; z <= MAX_ZOOM; z++) {
@@ -149,11 +162,11 @@ export function hasCapacity(book: Book, stake: bigint, payout: bigint): boolean 
  * What the program would offer for `box` right now (same checks as `quote` in tap.rs). With `stake`,
  * also the per-tap profit cap and the house's exposure cap, which reject a priced box as "limit".
  */
-export function quoteBox(book: Book, box: Box, price: bigint, now: number, sigma: number, stake?: bigint): QuoteResult {
+export function quoteBox(book: Book, box: Box, price: bigint, now: number, sigma: Sigma | number, stake?: bigint): QuoteResult {
   const lead = box.start - now;
   if (lead < TAP_LOCK_SECS) return { ok: false, reason: "locked" };
   if (lead > MAX_AHEAD_SECS) return { ok: false, reason: "too-far" };
-  const p = windowTouchProbability(price, box.lo, box.hi, lead, box.end - box.start, sigma * DRIFT_VOL_SCALE, sigma * WINDOW_VOL_SCALE);
+  const p = boxProbability(box, price, now, sigma);
   const m = multiplierBps(p, book.edgeBps);
   if (m === null) return { ok: false, reason: "unpriced" };
   if (m < book.minMultBps || m > book.maxMultBps) return { ok: false, reason: "range" };
