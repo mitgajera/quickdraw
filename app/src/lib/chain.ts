@@ -13,22 +13,34 @@ const BASE_URL = process.env.NEXT_PUBLIC_BASE_RPC || BASE_RPC;
  * to the public endpoint at once and give the configured one another try a minute later.
  */
 const FALLBACK: Record<string, string> = BASE_URL !== BASE_RPC ? { [BASE_URL]: BASE_RPC } : {};
-const COOL_DOWN_MS = 60_000;
-const downUntil: Record<string, number> = {};
+const COOL_DOWN_MS = 10 * 60_000;
+/** A configured RPC that has not answered in this long is treated as down (a spent key can take 5 s+). */
+const PRIMARY_TIMEOUT_MS = 2_500;
+// remembered across page loads, so a dead key costs one slow request, not one per visit
+const DOWN_KEY = "qd.rpcDownUntil";
+const downUntil: Record<string, number> = (() => {
+  try { return JSON.parse(globalThis.localStorage?.getItem(DOWN_KEY) ?? "{}") as Record<string, number>; } catch { return {}; }
+})();
+const markDown = (url: string) => {
+  downUntil[url] = Date.now() + COOL_DOWN_MS;
+  try { globalThis.localStorage?.setItem(DOWN_KEY, JSON.stringify(downUntil)); } catch { /* private mode */ }
+};
 const retryingFetch: typeof fetch = async (input, init) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
   for (let i = 0; ; i++) {
     const backup = FALLBACK[url];
     const target = backup && (downUntil[url] ?? 0) > Date.now() ? backup : url;
     try {
-      const res = await fetch(target, init);
+      const res = await fetch(target, target === url && backup
+        ? { ...init, signal: AbortSignal.timeout(PRIMARY_TIMEOUT_MS) }
+        : init);
       // a bad or revoked key (401/403) is worth falling back from, not worth retrying
       const keyProblem = (res.status === 401 || res.status === 403) && target === url && !!backup;
       if ((res.status !== 429 && res.status < 500 && !keyProblem) || i >= RETRIES) return res;
     } catch (e) {
       if (i >= RETRIES) throw e;
     }
-    if (target === url && backup) { downUntil[url] = Date.now() + COOL_DOWN_MS; continue; } // switch now, no wait
+    if (target === url && backup) { markDown(url); continue; } // switch now, no wait
     await new Promise((r) => setTimeout(r, 250 * 2 ** i + Math.random() * 200));
   }
 };
