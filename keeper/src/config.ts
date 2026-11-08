@@ -41,7 +41,7 @@ export function loadKeypair(file = config.keypairPath): Keypair {
 }
 
 /**
- * Demo crowd wallets: `BOT_SECRETS` (a JSON array of keypair arrays, for hosted deploys) or
+ * House player wallets: `BOT_SECRETS` (a JSON array of keypair arrays, for hosted deploys) or
  * `BOT_KEYPAIRS` (comma-separated keypair file paths). Empty when neither is set.
  */
 export function botKeypairs(): Keypair[] {

@@ -1,5 +1,5 @@
-// Demo crowd: house-run wallets that tap now and then, so a visitor always sees a live market. They
-// play by the same rules as everyone (same pricing, same settlement) and the app labels them "demo".
+// House players: house-run wallets that tap now and then, so a visitor always sees a live market. They
+// play by the same rules as everyone (same pricing, same settlement); /bots lists their addresses publicly.
 import { ComputeBudgetProgram, Transaction, type Connection, type Keypair } from "@solana/web3.js";
 import {
   boxAt, decodeBook, decodeCandles, decodeMarket, decodeOracle, decodePlayer, bookPda, explainError,
@@ -59,7 +59,7 @@ async function tapOnce(er: Connection, bot: Keypair, markets: MarketKeys[]): Pro
 /** Starts one independent loop per bot wallet, each tapping every 20-90 seconds. */
 export function startCrowd(er: Connection, bots: Keypair[], markets: MarketKeys[], log: (...a: unknown[]) => void) {
   for (const bot of bots) {
-    const name = `demo·${bot.publicKey.toBase58().slice(0, 4)}`;
+    const name = `house·${bot.publicKey.toBase58().slice(0, 4)}`;
     let lastNote = "";
     const loop = async () => {
       try {
@@ -74,6 +74,6 @@ export function startCrowd(er: Connection, bots: Keypair[], markets: MarketKeys[
     };
     setTimeout(() => void loop(), between(3_000, 20_000));
   }
-  log(`demo crowd: ${bots.length} wallet(s) ${bots.map((b) => b.publicKey.toBase58().slice(0, 4)).join(", ")}`);
+  log(`house players: ${bots.length} wallet(s) ${bots.map((b) => b.publicKey.toBase58().slice(0, 4)).join(", ")}`);
 }
 

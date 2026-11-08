@@ -243,7 +243,7 @@ function serve() {
     try {
       const url = new URL(req.url ?? "/", "http://localhost");
       if (url.pathname === "/health") { res.end(JSON.stringify({ ...stats, markets: config.markets, bots: bots.length })); return; }
-      // demo crowd wallets, so the app can label them honestly
+      // house player wallets, listed publicly so anyone can tell them apart
       if (url.pathname === "/bots") { res.end(JSON.stringify(bots.map((b) => b.publicKey.toBase58()))); return; }
       // "/sponsor" is the old name, kept for app builds that still call it
       if ((url.pathname === "/welcome" || url.pathname === "/sponsor") && req.method === "POST") {

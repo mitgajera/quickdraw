@@ -1,4 +1,4 @@
-// One-time setup for the demo crowd: each bot wallet deposits its devnet USDC and moves its player
+// One-time setup for the house players: each bot wallet deposits its devnet USDC and moves its player
 // account onto the rollup. Usage: BOT_KEYPAIRS=a.json,b.json pnpm --filter @quickdraw/keeper bots:setup
 import { Connection } from "@solana/web3.js";
 import { DELEGATION_PROGRAM_ID, ataOf, decodePlayer, ix, playerPda, sendWithKeypairs } from "@quickdraw/sdk";
