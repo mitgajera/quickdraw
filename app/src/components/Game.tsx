@@ -170,12 +170,26 @@ export function Game() {
   const attempted = useRef("");
   useEffect(() => {
     const st = account.stage;
+    if (st === "ready") attempted.current = ""; // a later session loss may re-authorise again
     if (!signer || account.busy || !(st === "setup" || st === "session")) return;
     const key = `${signer.publicKey.toBase58()}:${st}`;
     if (attempted.current === key) return;
     attempted.current = key;
     void account.activate();
   }, [signer, account.stage, account.busy, account.activate]);
+  // another tab or device that signs in registers its own tap key and replaces ours: notice it from
+  // the account we already poll, and re-authorise this browser silently
+  const sessionLost = !!(account.stage === "ready" && signer && player && (() => {
+    const key = sessionKey(signer.publicKey, false);
+    return !key || !player.session.equals(key.publicKey) || player.sessionExpires < Date.now() / 1000 + 30;
+  })());
+  useEffect(() => {
+    if (!sessionLost) return;
+    say("Re-authorising this browser to tap (another tab or device signed in)…");
+    void account.recheck();
+    // fire once per loss, not on every render while it lasts
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionLost]);
   // account errors outside the onboarding card (cash out, add funds) surface as toasts
   useEffect(() => { if (account.error && account.stage === "ready") say(account.error, true); }, [account.error, account.stage, say]);
 
