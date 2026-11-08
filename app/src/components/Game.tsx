@@ -17,7 +17,7 @@ const SYMBOLS: Symbol[] = ["SOL", "BTC", "ETH"];
 type Tab = "you" | "live" | "leaders" | "pool";
 const STAKES = [0.5, 1, 2, 5];
 // on-chain window pricing (~250k) plus scheduling the Magic Action that collects the stake
-const TAP_COMPUTE_UNITS = 600_000;
+const TAP_COMPUTE_UNITS = 1_000_000;
 const WALLET_TAP_FLAG = 0x8000_0000;
 const DECIMALS: Record<Symbol, number> = { SOL: 4, BTC: 1, ETH: 2 };
 const usd = (v: bigint | number) => {
@@ -111,7 +111,7 @@ export function Game() {
       // the stake stays in the wallet until this tap's Magic Action collects it on Solana
       const tx = new Transaction().add(ComputeBudgetProgram.setComputeUnitLimit({ units: TAP_COMPUTE_UNITS }), ix.placeWalletTap({
         signer: session.publicKey, owner: signer.publicKey, market: model.keys,
-        bandIndex, column, zoom, stake: amount, minMultBps: Math.floor(multBps * 0.85),
+        bandIndex, column, zoom, stake: amount, minMultBps: Math.floor(multBps * 0.85), quotedMultBps: multBps,
       }));
       tx.recentBlockhash = await erBlockhash();
       tx.feePayer = session.publicKey;
