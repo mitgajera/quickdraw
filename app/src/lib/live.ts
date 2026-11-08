@@ -3,16 +3,29 @@
 import type { PublicKey } from "@solana/web3.js";
 import {
   CANDLE_SLOTS, PLAYER_SIZE, PROGRAM_ID, bookPda, decodeBook, decodeCandles, decodeMarket, decodeOracle,
-  decodePlayer, idealZoom, judge, marketKeys, payoutOf, playerPda, sigmaFor,
+  decodePlayer, idealZoom, judge, marketKeys, payoutOf, playerPda, rangeAt, sigmaFor, windowRange,
   type Book, type Candles, type Market, type MarketKeys, type Player, type Symbol, type TapSlot,
 } from "@quickdraw/sdk";
 import { KEEPER_URL, base, er } from "./chain";
 
 export interface PricePoint { t: number; p: number }
-export interface Result { tap: TapSlot; outcome: "win" | "lose" | "void"; at: number; payout: bigint }
+/** The on-chain price evidence for one settled tap: per-second high/low the keeper recorded in its window. */
+export interface Evidence { low: bigint | null; high: bigint | null; bars: { sec: number; high: bigint; low: bigint }[] }
+export interface Result { tap: TapSlot; outcome: "win" | "lose" | "void"; at: number; payout: bigint; evidence: Evidence | null }
 export interface Pending { key: string; lo: bigint; hi: bigint; column: number; stake: bigint; multBps: number; at: number }
 export interface FeedItem { id: string; who: string; me: boolean; text: string; tone: "win" | "loss" | "" }
 export interface Leader { owner: string; pnl: bigint; wins: number; taps: number; me: boolean; demo: boolean }
+
+/** Captures the candle ring's record of a tap's window at the moment it settles (the ring wraps after 256s). */
+function evidenceFor(c: Candles, t: TapSlot): Evidence {
+  const bars: Evidence["bars"] = [];
+  for (let sec = t.start; sec < t.end; sec++) {
+    const r = rangeAt(c, sec);
+    if (r) bars.push({ sec, high: r[0], low: r[1] });
+  }
+  const range = windowRange(c, t.start, t.end);
+  return { low: range?.[0] ?? null, high: range?.[1] ?? null, bars };
+}
 
 const short = (k: PublicKey | string) => { const s = typeof k === "string" ? k : k.toBase58(); return `${s.slice(0, 4)}…${s.slice(-3)}`; };
 const usd = (v: bigint) => `$${(Number(v) / 1e6).toFixed(2)}`;
@@ -134,6 +147,7 @@ export class LiveModel {
         tap: t, at: Date.now() / 1000,
         outcome: outcome === "pending" ? "win" : outcome,
         payout: outcome === "win" || outcome === "pending" ? payoutOf(t) : outcome === "void" ? t.stake : 0n,
+        evidence: this.candles ? evidenceFor(this.candles, t) : null,
       };
       this.results.push(result);
       this.pushFeed({

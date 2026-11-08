@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "r
 import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletReadyState } from "@solana/wallet-adapter-base";
 import { ComputeBudgetProgram, Transaction } from "@solana/web3.js";
-import { explainError, ix, rowHeight, sendSigned, type Symbol } from "@quickdraw/sdk";
+import { ER_RPC, PROGRAM_ID, explainError, ix, playerPda, rowHeight, sendSigned, type Symbol } from "@quickdraw/sdk";
+import type { PublicKey } from "@solana/web3.js";
 import { Board } from "./Board";
 import { useAccount, type Stage } from "@/lib/account";
 import { erBlockhash, er, prefs, sessionKey, type AppSigner } from "@/lib/chain";
@@ -56,6 +57,7 @@ export function Game() {
     } else if (r.outcome === "lose") sound.lose();
   }), [model]);
 
+  const [proof, setProof] = useState<Result | null>(null);
   const [latency, setLatency] = useState<number | null>(null);
   const [flash, setFlash] = useState(false);
   const [toast, setToast] = useState<{ text: string; bad: boolean } | null>(null);
@@ -190,7 +192,7 @@ export function Game() {
           )}
         </div>
         <aside className="side">
-          {player && <Positions model={model} />}
+          {player && <Positions model={model} onProof={setProof} />}
           <div className="card">
             <div className="card-h"><span>Live taps</span><span>{model.online} trading</span></div>
             {model.feed.length === 0 ? <p className="empty">Waiting for the first tap…</p> : (
@@ -248,6 +250,9 @@ export function Game() {
       </footer>
 
       {toast && <div className={`toast${toast.bad ? " bad" : ""}`} role="status">{toast.text}</div>}
+      {proof && signer && (
+        <ProofModal result={proof} symbol={symbol} decimals={DECIMALS[symbol]} owner={signer.publicKey} onClose={() => setProof(null)} />
+      )}
     </main>
   );
 }
@@ -355,7 +360,7 @@ function Onboarding(props: {
   );
 }
 
-function Positions({ model }: { model: LiveModel }) {
+function Positions({ model, onProof }: { model: LiveModel; onProof: (r: Result) => void }) {
   const now = Date.now() / 1000 - model.clockOffset;
   const open = (model.player?.taps ?? []).filter((t) => t.open && t.market.equals(model.keys.market)).sort((a, b) => a.end - b.end);
   const recent = [...model.results].reverse().slice(0, 4);
@@ -376,10 +381,12 @@ function Positions({ model }: { model: LiveModel }) {
           })}
           {recent.map((r) => (
             <li key={`r${r.tap.id}-${r.at}`}>
-              <span className="who">{(r.tap.multBps / 1e4).toFixed(1)}x · {usd(r.tap.stake)}</span>
-              <span className={`mono ${r.outcome === "win" ? "win" : r.outcome === "lose" ? "loss" : ""}`}>
-                {r.outcome === "win" ? `+${usd(r.payout)}` : r.outcome === "lose" ? `−${usd(r.tap.stake)}` : "refunded"}
-              </span>
+              <button className="proofrow" onClick={() => onProof(r)} title="See how this tap was settled">
+                <span className="who">{(r.tap.multBps / 1e4).toFixed(1)}x · {usd(r.tap.stake)}</span>
+                <span className={`mono ${r.outcome === "win" ? "win" : r.outcome === "lose" ? "loss" : ""}`}>
+                  {r.outcome === "win" ? `+${usd(r.payout)}` : r.outcome === "lose" ? `−${usd(r.tap.stake)}` : "refunded"} <span className="proofhint">proof</span>
+                </span>
+              </button>
             </li>
           ))}
         </ul>
@@ -405,5 +412,64 @@ function ThemeIcon({ dark }: { dark: boolean }) {
       <circle cx="8" cy="8" r="3" fill="currentColor" />
       <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.4 1.4M11.6 11.6L13 13M3 13l1.4-1.4M11.6 4.4L13 3" />
     </svg>
+  );
+}
+
+/** How one settled tap was decided: the box, its window, and the prices the keeper recorded on-chain. */
+export function ProofModal({ result, symbol, decimals, owner, onClose }: {
+  result: Result; symbol: Symbol; decimals: number; owner: PublicKey; onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  const { tap, evidence, outcome } = result;
+  const px = (v: bigint) => `$${(Number(v) / 1e8).toFixed(Math.max(decimals, 2))}`;
+  const time = (sec: number) => new Date(sec * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const bars = evidence?.bars ?? [];
+  const lo = Number(tap.lo), hi = Number(tap.hi) + 1;
+  const prices = [lo, hi, ...bars.flatMap((b) => [Number(b.low), Number(b.high)])];
+  const min = Math.min(...prices), max = Math.max(...prices), pad = (max - min) * 0.15 || 1;
+  const W = 380, H = 150, L = 8, R = 8;
+  const y = (p: number) => 8 + (1 - (p - (min - pad)) / (max - min + 2 * pad)) * (H - 16);
+  const cols = Math.max(1, tap.end - tap.start), cw = (W - L - R) / cols;
+  const explorer = `https://explorer.solana.com/address/${playerPda(owner).toBase58()}?cluster=custom&customUrl=${encodeURIComponent(ER_RPC)}`;
+  const verdict = outcome === "win"
+    ? `The price traded between ${evidence?.low != null ? px(evidence.low) : "?"} and ${evidence?.high != null ? px(evidence.high) : "?"} in this window, which reaches your box, so the house paid ${usd(result.payout)} (${(tap.multBps / 1e4).toFixed(2)}x).`
+    : outcome === "lose"
+      ? `The price traded between ${evidence?.low != null ? px(evidence.low) : "?"} and ${evidence?.high != null ? px(evidence.high) : "?"} in this window and never reached your box, so the stake stayed with the house.`
+      : "No price was recorded for this window, so the stake was refunded.";
+  return (
+    <div className="modal-bg" onClick={onClose}>
+      <div className="modal" role="dialog" aria-label="Tap proof" onClick={(e) => e.stopPropagation()}>
+        <div className="card-h"><span>Proof · {symbol} tap #{tap.id}</span><button className="iconbtn" onClick={onClose} aria-label="Close">✕</button></div>
+        <p className={`verdict ${outcome === "win" ? "win" : outcome === "lose" ? "loss" : ""}`}>
+          {outcome === "win" ? "Won" : outcome === "lose" ? "Lost" : "Refunded"} · {usd(tap.stake)} at {(tap.multBps / 1e4).toFixed(2)}x
+        </p>
+        <svg viewBox={`0 0 ${W} ${H}`} className="proofchart" role="img" aria-label="Your box against the recorded price range">
+          <rect x={L} y={y(hi)} width={W - L - R} height={Math.max(2, y(lo) - y(hi))} className="pbox" />
+          {bars.map((b) => {
+            const x = L + (b.sec - tap.start + 0.5) * cw;
+            return <g key={b.sec}>
+              <line x1={x} x2={x} y1={y(Number(b.high))} y2={y(Number(b.low))} className="pbar" />
+              <line x1={x - 6} x2={x + 6} y1={y(Number(b.high))} y2={y(Number(b.high))} className="pbar" />
+              <line x1={x - 6} x2={x + 6} y1={y(Number(b.low))} y2={y(Number(b.low))} className="pbar" />
+            </g>;
+          })}
+        </svg>
+        <dl className="proofgrid">
+          <dt>Your box</dt><dd>{px(tap.lo)} – {px(tap.hi + 1n)}</dd>
+          <dt>Window</dt><dd>{time(tap.start)} – {time(tap.end)}</dd>
+          <dt>Recorded range</dt><dd>{evidence?.low != null && evidence.high != null ? `${px(evidence.low)} – ${px(evidence.high)}` : "none"}</dd>
+        </dl>
+        <p className="prooftext">{verdict}</p>
+        <p className="prooftext mute">Rule, enforced by the program: a box wins if the lowest-to-highest price recorded on-chain during its window overlaps the box. Prices move continuously, so every price in that range was traded.</p>
+        <div className="row">
+          <a className="btn" href={explorer} target="_blank" rel="noreferrer">Your account on the rollup ↗</a>
+          <a className="btn" href={`https://explorer.solana.com/address/${PROGRAM_ID.toBase58()}?cluster=devnet`} target="_blank" rel="noreferrer">Program ↗</a>
+        </div>
+      </div>
+    </div>
   );
 }
