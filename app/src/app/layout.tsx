@@ -8,9 +8,15 @@ const display = IBM_Plex_Sans_Condensed({
 });
 const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500", "600"], variable: "--font-mono" });
 
+const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://quickdraw-beta.vercel.app";
+const DESCRIPTION = "Tap the box the price will hit. Odds priced on-chain, taps confirmed in milliseconds on a MagicBlock rollup, every result provable on Solana.";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE),
   title: "Quickdraw — fastest tap wins",
-  description: "Tap the box the price will hit. On-chain odds, 50ms taps, settled from on-chain candles on Solana.",
+  description: DESCRIPTION,
+  openGraph: { title: "Quickdraw — fastest tap wins", description: DESCRIPTION, url: SITE, siteName: "Quickdraw", type: "website" },
+  twitter: { card: "summary_large_image", title: "Quickdraw — fastest tap wins", description: DESCRIPTION },
 };
 
 export const viewport: Viewport = { themeColor: "#0E0F11", width: "device-width", initialScale: 1 };
