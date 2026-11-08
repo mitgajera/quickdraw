@@ -125,6 +125,10 @@ export function Game() {
   useEffect(() => { if (account.error && account.stage === "ready") say(account.error, true); }, [account.error, account.stage, say]);
 
   const detected = wallet.wallets.filter((w) => w.readyState === WalletReadyState.Installed || w.readyState === WalletReadyState.Loadable);
+  const walletNames = detected.map((w) => w.adapter.name);
+  const onBlocked = useCallback(() => {
+    say(account.stage === "disconnected" ? "Connect a wallet to tap" : "Finish setting up your account to tap");
+  }, [account.stage, say]);
 
   return (
     <main className="app">
@@ -153,6 +157,7 @@ export function Game() {
           </button>
           <WalletButton
             signer={signer} busy={account.busy} walletUsdc={account.walletUsdc} canManage={account.stage === "ready"}
+            wallets={walletNames} onWallet={connectWallet}
             onDisconnect={disconnect} onCashOut={account.cashOut} onAddFunds={account.addFunds}
           />
         </div>
@@ -171,7 +176,7 @@ export function Game() {
 
       <div className="body">
         <div className="boardwrap">
-          <Board model={model} stake={stake} canTap={account.stage === "ready"} onTap={onTap} onReject={onReject} />
+          <Board model={model} stake={stake} canTap={account.stage === "ready"} onTap={onTap} onReject={onReject} onBlocked={onBlocked} />
           {banner && (
             <div className="winbanner" key={banner.key} role="status">
               <span className="lbl">Hit</span><b>+{banner.amount}</b><span className="mono">{banner.mult}</span>
@@ -179,7 +184,7 @@ export function Game() {
           )}
           {account.stage !== "ready" && (
             <Onboarding
-              stage={account.stage} busy={account.busy} error={account.error} wallets={detected.map((w) => w.adapter.name)}
+              stage={account.stage} busy={account.busy} error={account.error} wallets={walletNames}
               walletUsdc={account.walletUsdc} onWallet={connectWallet} onActivate={account.activate} onRecheck={account.recheck}
             />
           )}
@@ -247,13 +252,35 @@ export function Game() {
   );
 }
 
+/** Phone browsers have no wallet extension: open this page inside Phantom's in-app browser instead. */
+function phantomBrowseLink() {
+  if (typeof window === "undefined") return "https://phantom.com/download";
+  const url = encodeURIComponent(window.location.href);
+  return `https://phantom.app/ul/browse/${url}?ref=${encodeURIComponent(window.location.origin)}`;
+}
+const isPhone = () => typeof navigator !== "undefined" && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+/** "Connect Phantom" when a wallet is installed, otherwise open-in-Phantom (phones) or install (desktop). */
+function ConnectAction({ wallets, onWallet, primary = true }: { wallets: string[]; onWallet: (name: string) => void; primary?: boolean }) {
+  const cls = `btn${primary ? " primary" : ""}`;
+  const [phone, setPhone] = useState(false);
+  useEffect(() => setPhone(isPhone()), []);
+  if (wallets.length > 0) {
+    return <>{wallets.slice(0, 2).map((w) => <button key={w} className={cls} onClick={() => onWallet(w)}>Connect {w}</button>)}</>;
+  }
+  return phone
+    ? <a className={cls} href={phantomBrowseLink()}>Open in Phantom ↗</a>
+    : <a className={cls} href="https://phantom.com/download" target="_blank" rel="noreferrer">Install Phantom ↗</a>;
+}
+
 function WalletButton(props: {
   signer: AppSigner | null; busy: string | null; walletUsdc: bigint; canManage: boolean;
+  wallets: string[]; onWallet: (name: string) => void;
   onDisconnect: () => void; onCashOut: () => void; onAddFunds: () => void;
 }) {
   const { signer, busy, walletUsdc, canManage } = props;
   const [open, setOpen] = useState(false);
-  if (!signer) return null;
+  if (!signer) return <div className="connect-top"><ConnectAction wallets={props.wallets} onWallet={props.onWallet} /></div>;
   const act = (fn: () => void) => () => { setOpen(false); fn(); };
   return (
     <div style={{ position: "relative" }}>
@@ -291,12 +318,9 @@ function Onboarding(props: {
         {stage === "disconnected" && (
           <>
             <h2>Fastest tap wins.</h2>
-            <p>Tap a box on the live chart. If the price touches it before its column closes, you win the multiplier. Odds are computed on-chain, taps land in ~50ms on a MagicBlock rollup, and every result is settled from on-chain price candles. Plays with devnet USDC.</p>
+            <p>Tap a box. If the price touches it before its column closes, you win the multiplier — priced and settled on-chain, taps land in ~150ms on a MagicBlock rollup. Plays with devnet USDC.</p>
             <div className="row">
-              {wallets.map((w) => <button key={w} className="btn primary" onClick={() => props.onWallet(w)}>Connect {w}</button>)}
-              {wallets.length === 0 && (
-                <a className="btn primary" href="https://phantom.com/download" target="_blank" rel="noreferrer">Install Phantom ↗</a>
-              )}
+              <ConnectAction wallets={wallets} onWallet={props.onWallet} />
             </div>
           </>
         )}

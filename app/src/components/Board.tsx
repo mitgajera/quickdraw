@@ -27,14 +27,16 @@ interface Props {
   stake: number;
   canTap: boolean;
   onTap: (bandIndex: bigint, column: number, zoom: number, multBps: number) => void;
+  /** Tapped while the player cannot tap yet (not connected or not set up). */
+  onBlocked?: () => void;
   /** Tapped a box the house does not offer right now. */
   onReject?: (reason: "locked" | "too-far" | "unpriced" | "range", side: "near" | "far") => void;
 }
 
-export function Board({ model, stake, canTap, onTap, onReject }: Props) {
+export function Board({ model, stake, canTap, onTap, onReject, onBlocked }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
-  const props = useRef({ stake, canTap, onTap, onReject });
-  props.current = { stake, canTap, onTap, onReject };
+  const props = useRef({ stake, canTap, onTap, onReject, onBlocked });
+  props.current = { stake, canTap, onTap, onReject, onBlocked };
 
   useEffect(() => {
     const cvs = canvas.current!;
@@ -88,7 +90,8 @@ export function Board({ model, stake, canTap, onTap, onReject }: Props) {
     const onLeave = () => { hover = null; };
     const onDown = (e: PointerEvent) => {
       const r = cvs.getBoundingClientRect(), c = cellAt(e.clientX - r.left, e.clientY - r.top);
-      if (!c || !props.current.canTap) return;
+      if (!c) return;
+      if (!props.current.canTap) { props.current.onBlocked?.(); return; }
       const q = quoteAt(c.k, c.j);
       if (!q) return;
       if (!q.ok) {
