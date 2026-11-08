@@ -202,7 +202,7 @@ export function Game() {
           <button className="iconbtn" aria-label="How it works" title="How it works" onClick={() => setHowOpen(true)}>
             <span className="q">?</span>
           </button>
-          <button className="iconbtn" aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+          <button className="iconbtn theme-toggle" aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
             <ThemeIcon dark={theme === "dark"} />
           </button>

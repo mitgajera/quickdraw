@@ -241,3 +241,15 @@ a.badge { text-decoration: none; color: inherit; }
 .howlist li { counter-increment: how; position: relative; padding-left: 30px; font-size: 13.5px; line-height: 1.5; color: var(--mute); }
 .howlist li::before { content: "0" counter(how); position: absolute; left: 0; top: 1px; font-family: var(--font-mono), monospace; font-size: 11px; color: var(--accent); }
 .howlist b { color: var(--ink); font-weight: 600; }
+
+/* small phones (iPhone SE / mini, narrow panes): keep the header on one line */
+.top .btn, .badge { white-space: nowrap; }
+@media (max-width: 420px) {
+  .theme-toggle { display: none; }
+  .right { gap: 6px; }
+  .iconbtn { width: 32px; height: 32px; }
+  .badge { padding: 6px 7px; font-size: 10.5px; gap: 6px; }
+  .top { column-gap: 6px; }
+  .connect-top .btn { padding: 8px 9px; }
+  .onboard .row .btn { padding: 9px 11px; }
+}
