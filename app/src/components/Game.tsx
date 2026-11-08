@@ -284,6 +284,12 @@ export function Game() {
               <div className="card-h"><span>House pool</span><span>edge {(model.book.edgeBps / 100).toFixed(0)}%</span></div>
               <ul className="list">
                 <li><span className="who">Liquidity</span><span className="mono">{usd(model.book.liquidity)}</span></li>
+                {model.book.totalShares > 0n && (
+                  <li title="USDC each LP share is worth: started at $1.00, moves with the house's results">
+                    <span className="who">LP share value</span>
+                    <span className="mono">${(Number(model.book.liquidity) / Number(model.book.totalShares)).toFixed(4)}</span>
+                  </li>
+                )}
                 <li><span className="who">Open exposure</span><span className="mono">{usd(model.book.exposure)}</span></li>
                 <li><span className="who">Volume</span><span className="mono">{usd(model.book.volume)}</span></li>
                 <li><span className="who">Taps</span><span className="mono">{model.book.taps.toString()}</span></li>
@@ -534,6 +540,12 @@ export function ProofModal({ result, symbol, decimals, owner, onClose }: {
         <p className="prooftext">{verdict}</p>
         <p className="prooftext mute">Rule, enforced by the program: a box wins if the lowest-to-highest price recorded on-chain during its window overlaps the box. Prices move continuously, so every price in that range was traded.</p>
         <div className="row">
+          {outcome === "win" && (
+            <a className="btn primary" target="_blank" rel="noreferrer" href={`https://twitter.com/intent/tweet?${new URLSearchParams({
+              text: `Hit ${(tap.multBps / 1e4).toFixed(1)}x on ${symbol} in Quickdraw: +${usd(result.payout)}, priced and settled on-chain on Solana.`,
+              url: typeof window === "undefined" ? "" : window.location.origin,
+            })}`}>Share on X ↗</a>
+          )}
           <a className="btn" href={explorer} target="_blank" rel="noreferrer">Your account on the rollup ↗</a>
           <a className="btn" href={`https://explorer.solana.com/address/${PROGRAM_ID.toBase58()}?cluster=devnet`} target="_blank" rel="noreferrer">Program ↗</a>
         </div>
