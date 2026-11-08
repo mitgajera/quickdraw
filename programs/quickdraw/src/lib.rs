@@ -18,6 +18,11 @@ pub const BOOK_SEED: &[u8] = b"book";
 pub const PLAYER_SEED: &[u8] = b"player";
 pub const VAULT_SEED: &[u8] = b"vault";
 pub const VAULT_TOKENS_SEED: &[u8] = b"vault-tokens";
+pub const LEDGER_SEED: &[u8] = b"ledger";
+/// PDA that schedules this program's Magic Actions; base-layer handlers only trust its escrow.
+pub const ESCROW_AUTH_SEED: &[u8] = b"escrow-auth";
+/// Escrow index `ActionArgs::new` uses; the keeper funds this escrow with SOL for base fees.
+pub const ESCROW_INDEX: u8 = 255;
 /// Circle's devnet USDC: the only token the house takes. 6 decimals.
 pub const USDC_MINT: Pubkey = pubkey!("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU");
 pub const MINT_DECIMALS: u8 = 6;
@@ -137,5 +142,43 @@ pub mod quickdraw {
 
     pub fn settle(ctx: Context<Settle>) -> Result<()> {
         instructions::settle_handler(ctx)
+    }
+
+    // --- wallet play: stakes come straight from the wallet, winnings go straight back ---
+
+    pub fn init_ledger(ctx: Context<InitLedger>) -> Result<()> {
+        instructions::init_ledger_handler(ctx)
+    }
+
+    pub fn place_wallet_tap<'info>(
+        ctx: Context<'info, PlaceWalletTap<'info>>,
+        band_index: i64,
+        column: i64,
+        zoom: u8,
+        stake: u64,
+        min_mult_bps: u32,
+    ) -> Result<()> {
+        instructions::place_wallet_tap_handler(ctx, band_index, column, zoom, stake, min_mult_bps)
+    }
+
+    pub fn settle_wallet<'info>(ctx: Context<'info, SettleWallet<'info>>) -> Result<()> {
+        instructions::settle_wallet_handler(ctx)
+    }
+
+    pub fn collect_stake<'info>(
+        ctx: Context<'info, WalletAction>,
+        owner: Pubkey,
+        tap_id: u32,
+        amount: u64,
+    ) -> Result<()> {
+        instructions::collect_stake_handler(ctx, owner, tap_id, amount)
+    }
+
+    pub fn pay_out<'info>(
+        ctx: Context<'info, WalletAction>,
+        owner: Pubkey,
+        amount: u64,
+    ) -> Result<()> {
+        instructions::pay_out_handler(ctx, owner, amount)
     }
 }
