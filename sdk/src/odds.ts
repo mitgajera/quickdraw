@@ -137,10 +137,19 @@ export function idealZoom(market: Market, book: Book, price: bigint, now: number
 
 export type QuoteResult =
   | { ok: true; multBps: number }
-  | { ok: false; reason: "locked" | "too-far" | "unpriced" | "range" };
+  | { ok: false; reason: "locked" | "too-far" | "unpriced" | "range" }
+  | { ok: false; reason: "limit"; multBps: number };
 
-/** What the program would offer for `box` right now (same checks as `quote` in tap.rs). */
-export function quoteBox(book: Book, box: Box, price: bigint, now: number, sigma: number): QuoteResult {
+/** Same check as `has_capacity` in tap.rs: open payouts stay within the book's exposure cap. */
+export function hasCapacity(book: Book, stake: bigint, payout: bigint): boolean {
+  return (book.exposure + payout) * BigInt(ONE_X_BPS) <= (book.liquidity + stake) * BigInt(book.maxExposureBps);
+}
+
+/**
+ * What the program would offer for `box` right now (same checks as `quote` in tap.rs). With `stake`,
+ * also the per-tap profit cap and the house's exposure cap, which reject a priced box as "limit".
+ */
+export function quoteBox(book: Book, box: Box, price: bigint, now: number, sigma: number, stake?: bigint): QuoteResult {
   const lead = box.start - now;
   if (lead < TAP_LOCK_SECS) return { ok: false, reason: "locked" };
   if (lead > MAX_AHEAD_SECS) return { ok: false, reason: "too-far" };
@@ -148,6 +157,10 @@ export function quoteBox(book: Book, box: Box, price: bigint, now: number, sigma
   const m = multiplierBps(p, book.edgeBps);
   if (m === null) return { ok: false, reason: "unpriced" };
   if (m < book.minMultBps || m > book.maxMultBps) return { ok: false, reason: "range" };
+  if (stake !== undefined) {
+    const payout = (stake * BigInt(m)) / BigInt(ONE_X_BPS);
+    if (payout - stake > book.maxProfit || !hasCapacity(book, stake, payout)) return { ok: false, reason: "limit", multBps: m };
+  }
   return { ok: true, multBps: m };
 }
 
