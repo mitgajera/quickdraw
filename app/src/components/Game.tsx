@@ -110,12 +110,13 @@ export function Game() {
   const signIn = () => auth.login();
   const signOut = async () => { await auth.logout(); };
 
-  // the embedded wallet signs silently, so setup runs by itself once per wallet and stage; a failure
-  // stops the loop and leaves a retry button on the card
+  // the embedded wallet signs silently, so a new account or an expired session sets itself up once per
+  // wallet and stage; a failure leaves a retry button on the card. "undelegated" is left to the player:
+  // it is where cash out ends, and auto-resuming would deposit the withdrawn USDC straight back
   const attempted = useRef("");
   useEffect(() => {
     const st = account.stage;
-    if (!signer || account.busy || !(st === "new" || st === "undelegated" || st === "session")) return;
+    if (!signer || account.busy || !(st === "new" || st === "session")) return;
     const key = `${signer.publicKey.toBase58()}:${st}`;
     if (attempted.current === key) return;
     attempted.current = key;
