@@ -6,7 +6,7 @@ use crate::odds::{multiplier_bps, window_touch_probability, ONE_X_BPS};
 use crate::oracle::read_oracle_price;
 use crate::state::{Book, Candles, Market, Player, TapSlot};
 use crate::{
-    BOOK_SEED, DRIFT_VOL_SCALE, MARKET_SEED, MAX_AHEAD_SECS, MAX_ZOOM, PLAYER_SEED, TAP_LOCK_SECS,
+    BOOK_SEED, CALM_DRIFT_VOL_SCALE, CALM_FLOOR_RATIO, CALM_WINDOW_VOL_SCALE, DRIFT_VOL_SCALE, MARKET_SEED, MAX_AHEAD_SECS, MAX_ZOOM, PLAYER_SEED, TAP_LOCK_SECS,
     TAP_ORACLE_MAX_AGE, VOL_WINDOW_SECS, WINDOW_VOL_SCALE,
 };
 
@@ -57,10 +57,10 @@ pub fn quote(
         QuickdrawError::ColumnClosed
     );
 
-    let sigma = candles
-        .sigma(now, VOL_WINDOW_SECS)
-        .unwrap_or(0.0)
-        .max(market.sigma_floor as f64);
+    let estimate = candles.sigma(now, VOL_WINDOW_SECS).unwrap_or(0.0);
+    let sigma = estimate.max(market.sigma_floor as f64);
+    let sigma_calm = estimate.max(market.sigma_floor as f64 * CALM_FLOOR_RATIO);
+    // the likelier of the two scenarios: calm prices boxes near the price, jumpy the far ones
     let probability = window_touch_probability(
         price,
         lo,
@@ -69,7 +69,16 @@ pub fn quote(
         col as f64,
         sigma * DRIFT_VOL_SCALE,
         sigma * WINDOW_VOL_SCALE,
-    );
+    )
+    .max(window_touch_probability(
+        price,
+        lo,
+        hi,
+        lead as f64,
+        col as f64,
+        sigma_calm * CALM_DRIFT_VOL_SCALE,
+        sigma_calm * CALM_WINDOW_VOL_SCALE,
+    ));
     let mult_bps = multiplier_bps(probability, book.edge_bps)
         .filter(|m| (book.min_mult_bps..=book.max_mult_bps).contains(m))
         .ok_or(QuickdrawError::MultiplierOutOfRange)?;
@@ -281,7 +290,8 @@ pub(crate) mod tests {
 
     #[test]
     fn far_boxes_pay_more_and_the_current_band_pays_least() {
-        // one and two bands above, window opening in 7s: ~3.7x and ~4.7x (dense-integration refs)
+        // one and two bands above, window opening in 7s: ~3.2x and ~5.9x (the calm scenario prices the
+        // near box, the jumpy one the far box; same values as the sdk's odds test)
         let near = quote(
             &market(),
             &book(),
@@ -308,11 +318,11 @@ pub(crate) mod tests {
         .unwrap();
         assert!(far.mult_bps > near.mult_bps);
         assert!(
-            (34_500..38_500).contains(&near.mult_bps),
+            (31_000..32_200).contains(&near.mult_bps),
             "{}",
             near.mult_bps
         );
-        assert!((45_000..50_000).contains(&far.mult_bps), "{}", far.mult_bps);
+        assert!((57_500..60_000).contains(&far.mult_bps), "{}", far.mult_bps);
         // seven bands above in the next column is beyond the 25x cap: not offered
         assert!(quote(
             &market(),
@@ -326,8 +336,9 @@ pub(crate) mod tests {
             1
         )
         .is_err());
-        // the band holding today's price is far from certain three seconds out: ~2.1x
-        let inside = quote(
+        // the band holding today's price, three seconds out, is close to certain in a calm market:
+        // it would pay under 1.1x, so it is not offered at all (it used to pay ~2.1x and bled the house)
+        assert!(quote(
             &market(),
             &book(),
             &candles(),
@@ -336,14 +347,9 @@ pub(crate) mod tests {
             2249,
             250_001,
             0,
-            1,
+            1
         )
-        .unwrap();
-        assert!(
-            (19_500..21_500).contains(&inside.mult_bps),
-            "{}",
-            inside.mult_bps
-        );
+        .is_err());
     }
 
     #[test]

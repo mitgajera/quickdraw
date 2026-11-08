@@ -39,12 +39,20 @@ pub const MAX_ZOOM: u8 = 4;
 pub const MAX_AHEAD_SECS: i64 = 120;
 /// Seconds of candles used for the volatility estimate behind the odds.
 pub const VOL_WINDOW_SECS: i64 = 30;
-/// Scales on the candle volatility estimate (per-second midpoint moves, which read low): how far the
-/// price drifts before a column opens, and how far it wanders inside the 4-second column. Fitted on
-/// recorded devnet oracle data (SOL/BTC/ETH): hit rates match by row and by column, and realised
-/// return-to-player sits at 0.8-1.06 in every multiplier range (about 1 - edge overall).
-pub const DRIFT_VOL_SCALE: f64 = 2.5;
+/// Oracle prices are sticky with occasional jumps, which no single random-walk volatility fits: one
+/// tuned for jumps overpays boxes near the price, one tuned for calm overpays far boxes. So every box
+/// is priced under two scenarios and pays on the likelier one:
+/// - jumpy: candle volatility (floored by the market) scaled for drift before and wander inside the
+///   column;
+/// - calm: the same estimate floored at `CALM_FLOOR_RATIO` of the market floor, with smaller scales.
+/// Backtested on recorded devnet candles (SOL/BTC/ETH): return-to-player at or below about 0.94 in
+/// every multiplier range and every distance from the price (the old single scenario paid 1.3-1.6 on
+/// boxes next to the price).
+pub const DRIFT_VOL_SCALE: f64 = 1.5;
 pub const WINDOW_VOL_SCALE: f64 = 1.0;
+pub const CALM_DRIFT_VOL_SCALE: f64 = 0.8;
+pub const CALM_WINDOW_VOL_SCALE: f64 = 0.6;
+pub const CALM_FLOOR_RATIO: f64 = 0.5;
 /// After this long past a column, taps settle on whatever the ring holds (refund if nothing).
 pub const SETTLE_TIMEOUT_SECS: i64 = 30;
 
@@ -157,8 +165,9 @@ pub mod quickdraw {
         zoom: u8,
         stake: u64,
         min_mult_bps: u32,
+        quoted_mult_bps: u32,
     ) -> Result<()> {
-        instructions::place_wallet_tap_handler(ctx, band_index, column, zoom, stake, min_mult_bps)
+        instructions::place_wallet_tap_handler(ctx, band_index, column, zoom, stake, min_mult_bps, quoted_mult_bps)
     }
 
     pub fn settle_wallet<'info>(ctx: Context<'info, SettleWallet<'info>>) -> Result<()> {
