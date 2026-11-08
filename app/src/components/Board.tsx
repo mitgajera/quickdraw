@@ -107,11 +107,13 @@ export function Board({ model, stake, canTap, onTap, onReject, onBlocked }: Prop
     cvs.addEventListener("pointerleave", onLeave);
     cvs.addEventListener("pointerdown", onDown);
 
+    /** A tap or result: a rounded pill centred in its box. */
     const drawBlock = (x: number, y: number, w: number, h: number, fill: string, text: string, textColor: string, alpha = 1) => {
       ctx.globalAlpha = alpha;
-      ctx.fillStyle = fill; ctx.fillRect(x + 1, y + 1, w - 2, h - 2);
-      ctx.fillStyle = textColor; ctx.font = `600 12px ${monoFont}`;
-      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.font = `600 12px ${monoFont}`;
+      const pw = Math.max(16, Math.min(w - 8, ctx.measureText(text).width + 22)), ph = Math.max(14, Math.min(h - 10, 26));
+      ctx.fillStyle = fill; ctx.beginPath(); ctx.roundRect(x + (w - pw) / 2, y + (h - ph) / 2, pw, ph, ph / 2); ctx.fill();
+      ctx.fillStyle = textColor; ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.fillText(text, x + w / 2, y + h / 2 + 0.5);
       ctx.globalAlpha = 1;
     };
@@ -199,7 +201,8 @@ export function Board({ model, stake, canTap, onTap, onReject, onBlocked }: Prop
           // heat: the likeliest boxes (low multipliers, near the price) carry a faint wash
           if (!isHover) { ctx.fillStyle = rgba(T.accent, 0.09 * (1 - t) ** 3); ctx.fillRect(x0 + 1, y0 + 1, w - 1, h - 1); }
           if (!labelled) continue;
-          ctx.fillStyle = mix(T.mute, T.accent, Math.sqrt(t));
+          // likely boxes and long shots read bright; the middle of the grid stays quiet
+          ctx.fillStyle = mix(T.mute, T.ink, clamp(Math.max(1 - t / 0.25, (t - 0.45) / 0.55), 0, 1));
           ctx.fillText(fmtMult(q.multBps), x0 + w / 2, y0 + h / 2 + 0.5);
         }
       }
@@ -218,7 +221,7 @@ export function Board({ model, stake, canTap, onTap, onReject, onBlocked }: Prop
       for (const r of model.results) {
         const c = cellRect(r.tap.start, r.tap.lo, r.tap.hi);
         if (c.x + c.w < 0) continue;
-        if (r.outcome === "win") drawBlock(c.x, c.y, c.w, c.h, T.win, "+" + money(Number(r.payout) / 1e6), T.bg);
+        if (r.outcome === "win") drawBlock(c.x, c.y, c.w, c.h, rgba(T.win, 0.2), "+" + money(Number(r.payout) / 1e6), T.win);
         else if (r.outcome === "lose") drawBlock(c.x, c.y, c.w, c.h, rgba(T.loss, 0.16), money(-Number(r.tap.stake) / 1e6), T.loss, clamp(1 - (Date.now() / 1000 - r.at) / 3, 0.25, 1));
         else drawBlock(c.x, c.y, c.w, c.h, rgba(T.ink, 0.08), "refund", T.mute);
       }
@@ -321,7 +324,7 @@ export function Board({ model, stake, canTap, onTap, onReject, onBlocked }: Prop
         const x0 = Math.max(xOf(k * col), nowX), x1 = Math.min(xOf((k + 1) * col), AX);
         if (x1 - x0 < 30) continue;
         const lead = k * col - rt;
-        ctx.fillStyle = lead <= 0 ? T.accent : T.mute;
+        ctx.fillStyle = lead <= 0 ? T.win : T.mute;
         ctx.fillText(lead <= 0 ? "LIVE" : `${Math.ceil(lead)}s`, (x0 + x1) / 2, 7);
       }
 
