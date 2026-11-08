@@ -67,7 +67,6 @@ export function Profile() {
   const [allow, setAllow] = useState<{ on: boolean; left: bigint } | null>(null);
   const [stats, setStats] = useState<{ taps: number; wins: number; best: number; streak: number; pnl: bigint } | null>(null);
   const [receipts, setReceipts] = useState<Receipt[] | null>(null);
-  const [panel, setPanel] = useState<"deposit" | "withdraw" | null>(null);
 
   const refresh = useCallback(async () => {
     if (!signer) return;
@@ -106,71 +105,70 @@ export function Profile() {
   return (
     <Shell onSignOut={() => void auth.logout().then(() => { location.href = "/"; })}>
       <div className="profile">
-        <section className="card pad">
-          <div className="ident">
-            <span className="avatar lg" aria-hidden="true">{(auth.name ?? address).slice(0, 1).toUpperCase()}</span>
-            <div>
-              <h2 className="h2">{auth.name ?? "Player"}</h2>
-              <CopyRow text={address} label={short(address)} />
+        <div className="pcol">
+          <section className="card pad">
+            <div className="ident">
+              <span className="avatar lg" aria-hidden="true">{(auth.name ?? address).slice(0, 1).toUpperCase()}</span>
+              <div>
+                <h2 className="h2">{auth.name ?? "Player"}</h2>
+                <CopyRow text={address} label={short(address)} />
+              </div>
+              <a className="btn ghost" href={solscan(`account/${address}`)} target="_blank" rel="noreferrer">Solscan ↗</a>
             </div>
-            <a className="btn ghost" href={solscan(`account/${address}`)} target="_blank" rel="noreferrer">Solscan ↗</a>
-          </div>
-          <div className="balance">
-            <span className="muted">Wallet balance</span>
-            <b>{usd(account.walletUsdc)}</b>
-            <span className="muted small">devnet USDC · {sol === null ? "…" : `${sol.toFixed(3)} SOL for fees, covered by the house`}</span>
-          </div>
-          <div className="row2">
-            <button className="btn primary" onClick={() => setPanel(panel === "deposit" ? null : "deposit")} aria-expanded={panel === "deposit"}>Deposit</button>
-            <button className="btn" onClick={() => setPanel(panel === "withdraw" ? null : "withdraw")} aria-expanded={panel === "withdraw"}>Withdraw</button>
-          </div>
-          {panel === "deposit" && (
-            <div className="panel">
-              <p className="muted">Send devnet USDC to your wallet address from any Solana wallet, or claim 20 free from Circle&apos;s faucet (pick USDC and Solana Devnet). It stays in your wallet; each tap takes only its stake.</p>
-              <CopyRow text={address} label={address} mono />
-              <a className="btn" href="https://faucet.circle.com/" target="_blank" rel="noreferrer">Open Circle faucet ↗</a>
+            <div className="balance">
+              <span className="muted">Wallet balance</span>
+              <b>{usd(account.walletUsdc)}</b>
+              <span className="muted small">devnet USDC · {sol === null ? "…" : `${sol.toFixed(3)} SOL for fees, covered by the house`}</span>
             </div>
-          )}
-          {panel === "withdraw" && <Withdraw max={account.walletUsdc} busy={account.busy} onSend={account.sendUsdc} />}
-          {account.error && <p className="err">{account.error}</p>}
-        </section>
+          </section>
+          <section className="card pad">
+            <h3 className="h3">Deposit</h3>
+            <p className="muted">Send devnet USDC to this address from any Solana wallet, or claim 20 free at Circle&apos;s faucet (USDC, Solana Devnet). It stays in your wallet; each tap takes only its stake.</p>
+            <CopyRow text={address} label={address} mono />
+            <a className="btn block" href="https://faucet.circle.com/" target="_blank" rel="noreferrer">Open Circle faucet ↗</a>
+            <h3 className="h3 sep">Withdraw</h3>
+            <Withdraw max={account.walletUsdc} busy={account.busy} onSend={account.sendUsdc} />
+            {account.error && <p className="err">{account.error}</p>}
+          </section>
+        </div>
 
-        <section className="card pad">
-          <h3 className="h3">Record</h3>
-          <div className="tiles">
-            <div><span className="muted">P&amp;L</span><b className={stats && stats.pnl > 0n ? "win" : stats && stats.pnl < 0n ? "loss" : ""}>{stats ? `${stats.pnl > 0n ? "+" : ""}${usd(stats.pnl)}` : "—"}</b></div>
-            <div><span className="muted">Taps</span><b>{stats?.taps ?? 0}</b></div>
-            <div><span className="muted">Win rate</span><b>{winRate}%</b></div>
-            <div><span className="muted">Best streak</span><b>{stats?.best ?? 0}</b></div>
-          </div>
-          <div className="kv"><span>Current streak</span><span>{stats?.streak ?? 0}</span></div>
-          <div className="kv"><span>Wins</span><span>{stats?.wins ?? 0}</span></div>
-          {account.legacyBalance > 0n && (
-            <div className="kv"><span>Old game balance</span>
-              <span><button className="linkbtn" onClick={account.withdrawLegacy}>Move {usd(account.legacyBalance)} to wallet</button></span></div>
-          )}
-        </section>
+        <div className="pcol">
+          <section className="card pad">
+            <h3 className="h3">Record</h3>
+            <div className="tiles">
+              <div><span className="muted">P&amp;L</span><b className={stats && stats.pnl > 0n ? "win" : stats && stats.pnl < 0n ? "loss" : ""}>{stats ? `${stats.pnl > 0n ? "+" : ""}${usd(stats.pnl)}` : "—"}</b></div>
+              <div><span className="muted">Taps</span><b>{stats?.taps ?? 0}</b></div>
+              <div><span className="muted">Win rate</span><b>{winRate}%</b></div>
+              <div><span className="muted">Best streak</span><b>{stats?.best ?? 0}</b></div>
+            </div>
+            <div className="kv"><span>Current streak</span><span>{stats?.streak ?? 0}</span></div>
+            <div className="kv"><span>Wins</span><span>{stats?.wins ?? 0}</span></div>
+            {account.legacyBalance > 0n && (
+              <div className="kv"><span>Old game balance</span>
+                <span><button className="linkbtn" onClick={account.withdrawLegacy}>Move {usd(account.legacyBalance)} to wallet</button></span></div>
+            )}
+          </section>
+          <section className="card pad">
+            <h3 className="h3">Wallet play</h3>
+            <p className="muted">Your USDC never sits in a game account. Each tap&apos;s stake is pulled from your wallet by a MagicBlock Magic Action the program schedules, and winnings are sent straight back.</p>
+            <div className="kv"><span>Status</span><span>{allow === null ? "…" : allow.on ? "On" : "Paused"}</span></div>
+            <div className="kv"><span>Allowance left</span><span>{allow ? usd(allow.left) : "…"}</span></div>
+            {allow?.on
+              ? <button className="btn block" disabled={!!account.busy} onClick={account.pauseWalletPlay}>Pause wallet play</button>
+              : <a className="btn primary block" href="/">Turn on in the game</a>}
+            {account.busy && <p className="muted small">{account.busy}</p>}
+          </section>
+        </div>
 
-        <section className="card pad">
-          <h3 className="h3">Wallet play</h3>
-          <p className="muted">Your USDC never sits in a game account. Each tap&apos;s stake is pulled from your wallet by a MagicBlock Magic Action the program schedules, and winnings are sent straight back.</p>
-          <div className="kv"><span>Status</span><span>{allow === null ? "…" : allow.on ? "On" : "Paused"}</span></div>
-          <div className="kv"><span>Allowance left</span><span>{allow ? usd(allow.left) : "…"}</span></div>
-          {allow?.on
-            ? <button className="btn" disabled={!!account.busy} onClick={account.pauseWalletPlay}>Pause wallet play</button>
-            : <a className="btn primary" href="/">Turn on in the game</a>}
-          {account.busy && <p className="muted small">{account.busy}</p>}
-        </section>
-
-        <section className="card pad wide">
+        <section className="card pad receipts">
           <div className="h3row"><h3 className="h3">On-chain receipts</h3><button className="linkbtn" onClick={() => void refresh()}>Refresh</button></div>
+          <p className="muted small">Every USDC movement on your wallet, read from Solana devnet.</p>
           {receipts === null ? <p className="empty">Reading Solana devnet…</p> : receipts.length === 0 ? <p className="empty">No USDC movements yet.</p> : (
-            <ul className="list">
+            <ul className="list scroll">
               {receipts.map((r) => (
                 <li key={r.sig}>
                   <span className={`dotp${r.delta > 0 ? " won" : ""}`} />
-                  <span>{r.kind}</span>
-                  <span className="who small">{r.at ? new Date(r.at * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" }) : ""}</span>
+                  <span className="rk"><span>{r.kind}</span><span className="who small">{r.at ? new Date(r.at * 1000).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" }) : ""}</span></span>
                   <span className={`amt ${r.delta > 0 ? "win" : r.delta < 0 ? "" : "who"}`}>{r.delta === 0 ? "—" : `${r.delta > 0 ? "+" : "−"}$${Math.abs(r.delta).toFixed(2)}`}</span>
                   <a className="linkbtn" href={solscan(`tx/${r.sig}`)} target="_blank" rel="noreferrer">tx ↗</a>
                 </li>
@@ -193,7 +191,7 @@ function Withdraw({ max, busy, onSend }: { max: bigint; busy: string | null; onS
   const problem = !to.trim() ? null : !dest ? "That is not a Solana address" : units <= 0n ? null : units > max ? "More than your wallet holds" : null;
   const ready = !!dest && units > 0n && units <= max;
   return (
-    <form className="panel" onSubmit={(e) => { e.preventDefault(); if (!ready || !dest) return; if (!confirm) { setConfirm(true); return; } void Promise.resolve(onSend(dest, units)).then(() => setConfirm(false)); }}>
+    <form className="wform" onSubmit={(e) => { e.preventDefault(); if (!ready || !dest) return; if (!confirm) { setConfirm(true); return; } void Promise.resolve(onSend(dest, units)).then(() => setConfirm(false)); }}>
       <label className="field"><span>To</span>
         <input value={to} onChange={(e) => { setTo(e.target.value); setConfirm(false); }} placeholder="Solana address" spellCheck={false} autoComplete="off" />
       </label>
