@@ -33,7 +33,9 @@ Built for the [MLH x Solana Hackathon](https://events.mlh.com/events/15200-solan
 `render.yaml`). In the service's environment set `KEEPER_SECRET` to the keeper wallet's keypair JSON array
 (on Windows: `Get-Content wallets\operator.json | Set-Clipboard`, then paste); optionally `BOT_SECRETS` for
 the demo crowd. The keeper's wallet pays new players' fees and their starter USDC: `WELCOME_USDC`
-(default `1000000`, $1) per wallet, up to `WELCOME_BUDGET` (default `15000000`, $15) per process. The free
+(default `1000000`, $1) per wallet, up to `WELCOME_BUDGET` (default `15000000`, $15) per process, plus
+`WELCOME_SOL_BUDGET` (default 3 SOL) and `WELCOME_PER_IP_HOUR` (default 6). Grants need a valid Privy login
+token for `PRIVY_APP_ID` (checked with Privy's public keys, so no app secret is needed). The free
 plan sleeps after ~15 minutes without traffic, which stops ticks and settlement, so ping `/health` every
 few minutes (UptimeRobot works).
 
