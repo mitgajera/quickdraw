@@ -132,6 +132,15 @@ export class LiveModel {
 
   stop() { this.stopped = true; this.timers.forEach(clearInterval); this.timers = []; }
 
+  /**
+   * Whether the keeper is recording prices: its candle ring keeps up with the oracle. When it falls
+   * behind (the server is asleep or restarting) taps could not be judged, so the app pauses tapping.
+   */
+  get recording(): boolean {
+    if (!this.candles || this.publishTime === 0) return true;
+    return this.publishTime - this.candles.lastPublishTime <= 6;
+  }
+
   private async loadMarket() {
     const info = await base.getAccountInfo(this.keys.market).catch(() => null);
     if (info) { this.market = decodeMarket(info.data); this.bump(); }

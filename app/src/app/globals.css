@@ -210,3 +210,8 @@ a.btn { text-decoration: none; display: inline-block; }
 .proofgrid dt { color: var(--mute); } .proofgrid dd { font-family: var(--font-mono), monospace; text-align: right; }
 .prooftext { font-size: 13px; line-height: 1.5; margin-bottom: 8px; }
 .prooftext.mute { color: var(--mute); font-size: 12px; }
+
+/* keeper behind: tapping paused */
+.notice { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 6; max-width: calc(100% - 24px);
+  background: var(--panel); border: 1px solid var(--accent); color: var(--ink); border-radius: var(--radius);
+  padding: 6px 12px; font-size: 12px; text-align: center; }

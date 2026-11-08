@@ -100,6 +100,28 @@ export function Game() {
     }
   }, [account.stage, signer, stake, player, model, say]);
 
+  // settle is permissionless: if the keeper has not settled one of our finished taps a couple of
+  // seconds after it closed, settle it ourselves (free on the rollup, signed by the session key)
+  const settling = useRef(0);
+  useEffect(() => {
+    if (account.stage !== "ready" || !signer) return;
+    const id = setInterval(() => {
+      const session = sessionKey(signer.publicKey, false);
+      const now = Date.now() / 1000 - model.clockOffset;
+      const due = model.player?.taps.some((t) => t.open && t.market.equals(model.keys.market) && now > t.end + 2);
+      if (!session || !due || Date.now() - settling.current < 3000) return;
+      settling.current = Date.now();
+      void (async () => {
+        const tx = new Transaction().add(ix.settle(signer.publicKey, model.keys));
+        tx.recentBlockhash = await erBlockhash();
+        tx.feePayer = session.publicKey;
+        tx.sign(session);
+        await sendSigned(er, tx, { pollMs: 50 });
+      })().catch(() => { /* too early (still pending) or already settled: try again later */ });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [account.stage, signer, model]);
+
   const onReject = useCallback((reason: string, side: "near" | "far") => {
     say(reason === "locked" ? "That column is about to open — tap one further right"
       : reason === "too-far" ? "That column is more than two minutes out"
@@ -128,7 +150,9 @@ export function Game() {
 
   const { login } = auth;
   const onBlocked = useCallback(() => {
-    if (account.stage === "disconnected") { say("Sign in to tap"); login(); } else say("Setting up your account…");
+    if (account.stage === "disconnected") { say("Sign in to tap"); login(); }
+    else if (account.stage === "ready") say("Paused while the game server catches up with prices");
+    else say("Setting up your account…");
   }, [account.stage, say, login]);
 
   return (
@@ -178,7 +202,10 @@ export function Game() {
 
       <div className="body">
         <div className="boardwrap">
-          <Board model={model} stake={stake} canTap={account.stage === "ready"} onTap={onTap} onReject={onReject} onBlocked={onBlocked} />
+          <Board model={model} stake={stake} canTap={account.stage === "ready" && model.recording} onTap={onTap} onReject={onReject} onBlocked={onBlocked} />
+          {!model.recording && account.stage === "ready" && (
+            <div className="notice" role="status">The game server is catching up with prices — tapping resumes in a few seconds.</div>
+          )}
           {banner && (
             <div className="winbanner" key={banner.key} role="status">
               <span className="lbl">Hit</span><b>+{banner.amount}</b><span className="mono">{banner.mult}</span>
