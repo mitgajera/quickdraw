@@ -28,6 +28,17 @@ export function loadKeypair(file = config.keypairPath): Keypair {
 }
 
 /**
+ * Demo crowd wallets: `BOT_SECRETS` (a JSON array of keypair arrays, for hosted deploys) or
+ * `BOT_KEYPAIRS` (comma-separated keypair file paths). Empty when neither is set.
+ */
+export function botKeypairs(): Keypair[] {
+  const secrets = process.env.BOT_SECRETS?.trim();
+  if (secrets) return (JSON.parse(secrets) as number[][]).map((k) => Keypair.fromSecretKey(Uint8Array.from(k)));
+  const files = process.env.BOT_KEYPAIRS?.split(",").map((f) => f.trim()).filter(Boolean) ?? [];
+  return files.map((f) => loadKeypair(f));
+}
+
+/**
  * The keeper's key: `KEEPER_SECRET` (the keypair file's JSON array, for hosts like Render where
  * secrets are environment variables) or else the file at `KEEPER_KEYPAIR`.
  */

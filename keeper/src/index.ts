@@ -6,12 +6,14 @@ import {
   PLAYER_SIZE, PROGRAM_ID, SETTLE_TIMEOUT_SECS, decodeCandles, decodePlayer, explainError, ix, judge,
   marketKeys, parseEvents, sendWithKeypairs, type Candles, type MarketKeys,
 } from "@quickdraw/sdk";
-import { config, keeperKeypair } from "./config";
+import { botKeypairs, config, keeperKeypair } from "./config";
+import { startCrowd } from "./crowd";
 
 const keeper: Keypair = keeperKeypair();
 const base = new Connection(config.baseRpc, "confirmed");
 const er = new Connection(config.erRpc, "confirmed");
 const markets: MarketKeys[] = config.markets.map(marketKeys);
+const bots = botKeypairs();
 
 const stats = {
   startedAt: new Date().toISOString(),
@@ -143,7 +145,9 @@ function serve() {
     if (req.method === "OPTIONS") { res.end(); return; }
     try {
       const url = new URL(req.url ?? "/", "http://localhost");
-      if (url.pathname === "/health") { res.end(JSON.stringify({ ...stats, markets: config.markets })); return; }
+      if (url.pathname === "/health") { res.end(JSON.stringify({ ...stats, markets: config.markets, bots: bots.length })); return; }
+      // demo crowd wallets, so the app can label them honestly
+      if (url.pathname === "/bots") { res.end(JSON.stringify(bots.map((b) => b.publicKey.toBase58()))); return; }
       if (url.pathname === "/sponsor" && req.method === "POST") {
         let body = "";
         for await (const chunk of req) { body += chunk; if (body.length > 512) break; }
@@ -168,4 +172,5 @@ for (const m of markets) {
 }
 settleLoop();
 serve();
+if (bots.length) startCrowd(er, bots, markets, log);
 setInterval(() => log(`ticks ${stats.ticks} (last ${stats.lastTickMs}ms, ${stats.tickErrors} err) settles ${stats.settles} W/L/V ${stats.wins}/${stats.losses}/${stats.voids} players ${stats.players} open ${stats.openTaps}`), 30_000);
