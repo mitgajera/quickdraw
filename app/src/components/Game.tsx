@@ -157,6 +157,7 @@ export function Game() {
           </button>
           <WalletButton
             signer={signer} name={auth.name} ready={auth.ready} authenticated={auth.authenticated}
+            walletError={auth.walletError} onRetryWallet={auth.retryWallet}
             busy={account.busy} walletUsdc={account.walletUsdc} canManage={account.stage === "ready"}
             onSignIn={signIn} onSignOut={signOut} onCashOut={account.cashOut} onAddFunds={account.addFunds}
           />
@@ -186,6 +187,7 @@ export function Game() {
             <Onboarding
               stage={account.stage} busy={account.busy} error={account.error} ready={auth.ready} authenticated={auth.authenticated}
               address={signer?.publicKey.toBase58() ?? null} onSignIn={signIn} onActivate={account.activate}
+              walletError={auth.walletError} onRetryWallet={auth.retryWallet} onSignOut={signOut}
             />
           )}
         </div>
@@ -268,6 +270,7 @@ function CopyAddress({ address }: { address: string }) {
 
 function WalletButton(props: {
   signer: AppSigner | null; name: string | null; ready: boolean; authenticated: boolean;
+  walletError: string | null; onRetryWallet: () => void;
   busy: string | null; walletUsdc: bigint; canManage: boolean;
   onSignIn: () => void; onSignOut: () => void; onCashOut: () => void; onAddFunds: () => void;
 }) {
@@ -275,7 +278,11 @@ function WalletButton(props: {
   const [open, setOpen] = useState(false);
   if (!props.ready) return <div className="connect-top"><button className="btn" disabled>Loading…</button></div>;
   if (!props.authenticated) return <div className="connect-top"><button className="btn primary" onClick={props.onSignIn}>Sign in</button></div>;
-  if (!signer) return <div className="connect-top"><button className="btn" disabled>Creating wallet…</button></div>;
+  if (!signer) {
+    return <div className="connect-top">{props.walletError
+      ? <button className="btn" onClick={props.onRetryWallet}>Retry wallet</button>
+      : <button className="btn" disabled>Creating wallet…</button>}</div>;
+  }
   const act = (fn: () => void) => () => { setOpen(false); fn(); };
   const address = signer.publicKey.toBase58();
   return (
@@ -301,6 +308,7 @@ function WalletButton(props: {
 function Onboarding(props: {
   stage: Stage; busy: string | null; error: string | null; ready: boolean; authenticated: boolean;
   address: string | null; onSignIn: () => void; onActivate: () => void;
+  walletError: string | null; onRetryWallet: () => void; onSignOut: () => void;
 }) {
   const { stage, busy, error, address } = props;
   const needsUsdc = error === NEEDS_USDC;
@@ -316,7 +324,16 @@ function Onboarding(props: {
             </div>
           </>
         )}
-        {props.authenticated && !address && <p>Creating your wallet…</p>}
+        {props.authenticated && !address && !props.walletError && <p>Creating your wallet…</p>}
+        {props.authenticated && !address && props.walletError && (
+          <>
+            <p className="err">{props.walletError}</p>
+            <div className="row">
+              <button className="btn primary" onClick={props.onRetryWallet}>Try again</button>
+              <button className="btn" onClick={props.onSignOut}>Sign out</button>
+            </div>
+          </>
+        )}
         {address && needsUsdc && !busy && (
           <>
             <h2>Add devnet USDC</h2>
