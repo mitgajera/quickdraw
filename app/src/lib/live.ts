@@ -27,6 +27,37 @@ function evidenceFor(c: Candles, t: TapSlot): Evidence {
   return { low: range?.[0] ?? null, high: range?.[1] ?? null, bars };
 }
 
+type Outcome = "win" | "lose" | "void";
+const pnlOf = (t: TapSlot, o: Outcome) => (o === "win" ? payoutOf(t) - t.stake : o === "lose" ? -t.stake : 0n);
+
+/**
+ * The outcome of each settled tap, matched to the change in the player's win count and P&L (which the
+ * program updates on every settlement). Our candle-based guess is the tie-breaker when several taps
+ * settle in one poll and more than one assignment fits.
+ */
+function settledOutcomes(taps: TapSlot[], dWins: number, dPnl: bigint, guess: (t: TapSlot) => string): Outcome[] {
+  const guesses = taps.map((t) => { const g = guess(t); return (g === "pending" ? "win" : g) as Outcome; });
+  if (taps.length > 6) return guesses;
+  const all: Outcome[] = ["win", "lose", "void"];
+  let best: Outcome[] | null = null, bestScore = -1;
+  const pick: Outcome[] = [];
+  const walk = (i: number, wins: number, pnl: bigint) => {
+    if (i === taps.length) {
+      if (wins !== dWins || pnl !== dPnl) return;
+      const score = pick.filter((o, k) => o === guesses[k]).length;
+      if (score > bestScore) { bestScore = score; best = [...pick]; }
+      return;
+    }
+    for (const o of all) {
+      pick.push(o);
+      walk(i + 1, wins + (o === "win" ? 1 : 0), pnl + pnlOf(taps[i]!, o));
+      pick.pop();
+    }
+  };
+  walk(0, 0, 0n);
+  return best ?? guesses;
+}
+
 const short = (k: PublicKey | string) => { const s = typeof k === "string" ? k : k.toBase58(); return `${s.slice(0, 4)}…${s.slice(-3)}`; };
 const usd = (v: bigint) => `$${(Number(v) / 1e6).toFixed(2)}`;
 const mult = (bps: number) => `${(bps / 1e4).toFixed(bps >= 100_000 ? 0 : 1)}x`;
@@ -137,24 +168,30 @@ export class LiveModel {
     const prev = this.player;
     this.player = next;
     if (!prev || !next) return;
-    // taps that were open and are now closed have been settled by the keeper
-    for (const t of prev.taps) {
-      if (!t.open || !t.market.equals(this.keys.market)) continue;
-      const still = next.taps.find((x) => x.open && x.id === t.id);
-      if (still) continue;
-      const outcome = this.candles ? judge(this.candles, t.lo, t.hi, t.start, t.end, Math.max(this.publishTime, t.end)) : "lose";
-      const result: Result = {
-        tap: t, at: Date.now() / 1000,
-        outcome: outcome === "pending" ? "win" : outcome,
-        payout: outcome === "win" || outcome === "pending" ? payoutOf(t) : outcome === "void" ? t.stake : 0n,
-        evidence: this.candles ? evidenceFor(this.candles, t) : null,
-      };
-      this.results.push(result);
-      this.pushFeed({
-        id: `r${t.id}-${result.at}`, who: "you", me: true, tone: result.outcome === "win" ? "win" : result.outcome === "lose" ? "loss" : "",
-        text: result.outcome === "win" ? `won ${usd(result.payout)}` : result.outcome === "lose" ? `lost ${usd(t.stake)}` : `refunded ${usd(t.stake)}`,
+    // taps that were open and are now closed have been settled; the account's own win and P&L
+    // counters say exactly how, so the result never depends on how fresh our candle copy is
+    const closed = prev.taps.filter((t) => t.open && !next.taps.some((x) => x.open && x.id === t.id));
+    if (closed.length) {
+      const outcomes = settledOutcomes(closed, next.wins - prev.wins, next.pnl - prev.pnl, (t) =>
+        this.candles ? judge(this.candles, t.lo, t.hi, t.start, t.end, Math.max(this.publishTime, t.end)) : "lose");
+      const fresh: Result[] = [];
+      closed.forEach((t, i) => {
+        if (!t.market.equals(this.keys.market)) return;
+        const outcome = outcomes[i]!;
+        const result: Result = {
+          tap: t, at: Date.now() / 1000, outcome,
+          payout: outcome === "win" ? payoutOf(t) : outcome === "void" ? t.stake : 0n,
+          evidence: this.candles ? evidenceFor(this.candles, t) : null,
+        };
+        fresh.push(result);
+        this.results.push(result);
+        this.pushFeed({
+          id: `r${t.id}-${result.at}`, who: "you", me: true, tone: outcome === "win" ? "win" : outcome === "lose" ? "loss" : "",
+          text: outcome === "win" ? `won ${usd(result.payout)}` : outcome === "lose" ? `lost ${usd(t.stake)}` : `refunded ${usd(t.stake)}`,
+        });
+        this.resultListeners.forEach((f) => f(result));
       });
-      this.resultListeners.forEach((f) => f(result));
+      if (fresh.length) void this.refreshEvidence(fresh);
     }
     // drop pending taps the chain now shows
     this.pending = this.pending.filter((p) => !next.taps.some((t) => t.open && t.start === p.column * (this.market?.colSecs ?? 4)
@@ -162,6 +199,15 @@ export class LiveModel {
     const horizon = Date.now() / 1000 - 90;
     this.results = this.results.filter((r) => r.at > horizon);
     this.confirms = this.confirms.filter((c) => c.at > Date.now() / 1000 - 2);
+  }
+
+  /** Re-reads the candle ring right after a settlement so each proof shows the final recorded window. */
+  private async refreshEvidence(results: Result[]) {
+    const info = await er.getAccountInfo(this.keys.candles).catch(() => null);
+    if (!info) return;
+    this.candles = decodeCandles(info.data);
+    for (const r of results) r.evidence = evidenceFor(this.candles, r.tap);
+    this.bump();
   }
 
   /** candles + book, once a second */
