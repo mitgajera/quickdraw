@@ -1,15 +1,20 @@
 // House players: house-run wallets that tap now and then, so a visitor always sees a live market. They
-// play by the same rules as everyone (same pricing, same settlement); /bots lists their addresses publicly.
+// play by the same rules as everyone (wallet play, same pricing, same settlement); /bots lists their
+// addresses publicly. When a wallet runs low the keeper tops it up from its own USDC, so they keep going.
 import { ComputeBudgetProgram, Transaction, type Connection, type Keypair } from "@solana/web3.js";
 import {
-  boxAt, decodeBook, decodeCandles, decodeMarket, decodeOracle, decodePlayer, bookPda, explainError,
-  idealZoom, ix, playerPda, quoteBox, rowHeight, sigmaFor, type MarketKeys,
+  ataOf, boxAt, decodeBook, decodeCandles, decodeMarket, decodeOracle, bookPda, explainError,
+  idealZoom, ix, quoteBox, rowHeight, sendWithKeypairs, sigmaFor, transferTokens, type MarketKeys,
 } from "@quickdraw/sdk";
 
 const between = (lo: number, hi: number) => lo + Math.random() * (hi - lo);
 
 /** Market weights: SOL is the headline market. */
 const WEIGHTS: Record<string, number> = { SOL: 0.6, BTC: 0.2, ETH: 0.2 };
+/** Small stakes, mostly $0.10, so the house's edge drains them slowly. */
+const STAKES = [100_000n, 100_000n, 100_000n, 250_000n];
+/** Top up a wallet below LOW with REFILL, at most once per REFILL_EVERY_MS, keeping KEEPER_RESERVE for welcomes. */
+const LOW = 300_000n, REFILL = 2_000_000n, REFILL_EVERY_MS = 10 * 60_000, KEEPER_RESERVE = 5_000_000n;
 
 function chooseMarket(markets: MarketKeys[]): MarketKeys {
   const total = markets.reduce((s, m) => s + (WEIGHTS[m.symbol] ?? 0.1), 0);
@@ -18,15 +23,13 @@ function chooseMarket(markets: MarketKeys[]): MarketKeys {
   return markets[0]!;
 }
 
-async function tapOnce(er: Connection, bot: Keypair, markets: MarketKeys[]): Promise<string> {
-  const playerInfo = await er.getAccountInfo(playerPda(bot.publicKey));
-  if (!playerInfo) return "not on the rollup (run bots:setup)";
-  const balance = decodePlayer(playerInfo.data).balance;
-  // small, varied stakes so a few dollars keeps a bot playing for hours
-  const stakes = [100_000n, 100_000n, 250_000n, 250_000n, 500_000n].filter((s) => s <= balance);
-  if (stakes.length === 0) return "out of balance";
+const usdcOf = (base: Connection, who: Keypair["publicKey"]) =>
+  base.getTokenAccountBalance(ataOf(who)).then((r) => BigInt(r.value.amount)).catch(() => 0n);
+
+async function tapOnce(er: Connection, bot: Keypair, markets: MarketKeys[], wallet: bigint): Promise<string> {
+  const stakes = STAKES.filter((s) => s <= wallet);
+  if (stakes.length === 0) return "wallet empty";
   const stake = stakes[Math.floor(Math.random() * stakes.length)]!;
-  if (balance < stake) return "out of balance";
 
   const m = chooseMarket(markets);
   const [mi, bi, ci, oi] = await er.getMultipleAccountsInfo([m.market, bookPda(), m.candles, m.oracle]);
@@ -36,16 +39,20 @@ async function tapOnce(er: Connection, bot: Keypair, markets: MarketKeys[]): Pro
   const zoom = idealZoom(market, book, o.price, o.publishTime, sigma);
   const row = o.price / rowHeight(market, zoom);
   const colNow = Math.floor(o.publishTime / market.colSecs);
+  // mostly the safer boxes near the price, now and then a long shot, like a person would
+  const [lo, hi] = Math.random() < 0.15 ? [40_000, 120_000] : [13_000, 40_000];
 
-  // try a few random nearby boxes; keep ones a person would plausibly tap (1.5x - 12x)
-  for (let attempt = 0; attempt < 12; attempt++) {
+  for (let attempt = 0; attempt < 16; attempt++) {
     const column = colNow + 2 + Math.floor(Math.random() * 3);
     const bandIndex = row + BigInt(Math.round(between(-3.5, 3.5)));
-    const q = quoteBox(book, boxAt(market, bandIndex, column, zoom), o.price, o.publishTime, sigma);
-    if (!q.ok || q.multBps < 15_000 || q.multBps > 120_000) continue;
+    const q = quoteBox(book, boxAt(market, bandIndex, column, zoom), o.price, o.publishTime, sigma, stake);
+    if (!q.ok || q.multBps < lo || q.multBps > hi) continue;
     const tx = new Transaction().add(
-      ComputeBudgetProgram.setComputeUnitLimit({ units: 800_000 }),
-      ix.placeTap({ signer: bot.publicKey, owner: bot.publicKey, market: m, bandIndex, column, zoom, stake, minMultBps: Math.floor(q.multBps * 0.85) }),
+      ComputeBudgetProgram.setComputeUnitLimit({ units: 1_000_000 }),
+      ix.placeWalletTap({
+        signer: bot.publicKey, owner: bot.publicKey, market: m, bandIndex, column, zoom, stake,
+        minMultBps: Math.floor(q.multBps * 0.85), quotedMultBps: q.multBps,
+      }),
     );
     tx.recentBlockhash = (await er.getLatestBlockhash()).blockhash;
     tx.feePayer = bot.publicKey;
@@ -56,24 +63,33 @@ async function tapOnce(er: Connection, bot: Keypair, markets: MarketKeys[]): Pro
   return `${m.symbol}: no box in range this time`;
 }
 
-/** Starts one independent loop per bot wallet, each tapping every 20-90 seconds. */
-export function startCrowd(er: Connection, bots: Keypair[], markets: MarketKeys[], log: (...a: unknown[]) => void) {
+/** Starts one independent loop per house wallet, each tapping every 25-75 seconds. */
+export function startCrowd(
+  base: Connection, er: Connection, bots: Keypair[], markets: MarketKeys[], keeper: Keypair,
+  log: (...a: unknown[]) => void,
+) {
   for (const bot of bots) {
     const name = `house·${bot.publicKey.toBase58().slice(0, 4)}`;
-    let lastNote = "";
+    let lastNote = "", lastRefill = 0;
     const loop = async () => {
       try {
-        const note = await tapOnce(er, bot, markets);
+        let wallet = await usdcOf(base, bot.publicKey);
+        if (wallet < LOW && Date.now() - lastRefill > REFILL_EVERY_MS && (await usdcOf(base, keeper.publicKey)) >= REFILL + KEEPER_RESERVE) {
+          lastRefill = Date.now();
+          await sendWithKeypairs(base, [transferTokens(keeper.publicKey, bot.publicKey, REFILL)], [keeper], { pollMs: 500 });
+          wallet += REFILL;
+          log(`${name} topped up with $${Number(REFILL) / 1e6}`);
+        }
+        const note = await tapOnce(er, bot, markets, wallet);
         // log taps, but only log a repeated problem once
         if (note.startsWith("tapped") || note !== lastNote) log(`${name} ${note}`);
         lastNote = note;
       } catch (e) {
         log(`${name} tap failed: ${explainError(e)}`);
       }
-      setTimeout(() => void loop(), between(20_000, 90_000));
+      setTimeout(() => void loop(), between(25_000, 75_000));
     };
     setTimeout(() => void loop(), between(3_000, 20_000));
   }
   log(`house players: ${bots.length} wallet(s) ${bots.map((b) => b.publicKey.toBase58().slice(0, 4)).join(", ")}`);
 }
-

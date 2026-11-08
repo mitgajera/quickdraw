@@ -272,5 +272,5 @@ settleLoop();
 serve();
 void fundEscrow().catch((e) => log("escrow top-up failed", explainError(e)));
 setInterval(() => void fundEscrow().catch((e) => log("escrow top-up failed", explainError(e))), 5 * 60_000);
-if (bots.length) startCrowd(er, bots, markets, log);
+if (bots.length) startCrowd(base, er, bots, markets, keeper, log);
 setInterval(() => log(`ticks ${stats.ticks} (last ${stats.lastTickMs}ms, ${stats.tickErrors} err) settles ${stats.settles} W/L/V ${stats.wins}/${stats.losses}/${stats.voids} players ${stats.players} open ${stats.openTaps}`), 30_000);
