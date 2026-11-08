@@ -29,6 +29,9 @@ export const config = {
   welcomePerIpHour: Number(env("WELCOME_PER_IP_HOUR", "6")),
   /** Privy app whose login tokens /welcome accepts; set PRIVY_APP_ID="" to accept unauthenticated calls. */
   privyAppId: env("PRIVY_APP_ID", "cmw7jsye300eu0hjq0s6f7jns"),
+  /** Keep the Magic Action escrow (pays wallet-play transfers on Solana) above this. */
+  escrowMinLamports: Number(env("ESCROW_MIN_LAMPORTS", String(100_000_000))),
+  escrowTopUpLamports: Number(env("ESCROW_TOPUP_LAMPORTS", String(300_000_000))),
 };
 
 const parseSecret = (json: string) => Keypair.fromSecretKey(Uint8Array.from(JSON.parse(json) as number[]));

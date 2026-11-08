@@ -5,7 +5,7 @@ import http from "node:http";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { ComputeBudgetProgram, Connection, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction, type Keypair } from "@solana/web3.js";
 import {
-  PLAYER_SIZE, PROGRAM_ID, SETTLE_TIMEOUT_SECS, ataOf, createAtaIdempotent, decodeCandles, decodePlayer, explainError, ix, judge,
+  PLAYER_SIZE, PROGRAM_ID, SETTLE_TIMEOUT_SECS, WALLET_TAP_FLAG, actionEscrowPda, ataOf, createAtaIdempotent, decodeCandles, decodePlayer, explainError, ix, judge,
   marketKeys, parseEvents, playerPda, sendWithKeypairs, transferTokens, type Candles, type MarketKeys,
 } from "@quickdraw/sdk";
 import { botKeypairs, config, keeperKeypair } from "./config";
@@ -84,22 +84,33 @@ async function settleOnce() {
       const taps = p.taps.filter((t) => t.open && t.market.equals(m.market));
       open += taps.length;
       if (!c || taps.length === 0) continue;
-      const ready = taps.some((t) => {
+      const decided = (t: (typeof taps)[number]) => {
         const dataNow = now >= t.end + SETTLE_TIMEOUT_SECS ? Math.max(c.lastPublishTime, t.end) : c.lastPublishTime;
         return judge(c, t.lo, t.hi, t.start, t.end, dataNow) !== "pending";
-      });
-      const key = `${p.owner.toBase58()}:${m.symbol}`;
-      if (ready && !inflight.has(key)) void settle(p.owner, m, key);
+      };
+      // wallet taps (paid from the wallet) and balance taps settle through different instructions
+      for (const wallet of [false, true]) {
+        if (!taps.some((t) => ((t.id & WALLET_TAP_FLAG) !== 0) === wallet && decided(t))) continue;
+        const key = `${p.owner.toBase58()}:${m.symbol}:${wallet ? "w" : "b"}`;
+        if (!inflight.has(key) && (backoff.get(key) ?? 0) < Date.now()) void settle(p.owner, m, key, wallet);
+      }
     }
   }
   stats.players = accounts.length;
   stats.openTaps = open;
 }
 
-async function settle(owner: PublicKey, m: MarketKeys, key: string) {
+/** Wallet wins wait for their stake to be collected on Solana: retry those gently. */
+const backoff = new Map<string, number>();
+
+async function settle(owner: PublicKey, m: MarketKeys, key: string, wallet: boolean) {
   inflight.add(key);
   try {
-    const r = await sendWithKeypairs(er, [ix.settle(owner, m)], [keeper], { withLogs: true, skipPreflight: true });
+    const ixs = wallet
+      // settle_wallet also schedules the Magic Action that pays the wallet on Solana
+      ? [ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }), ix.settleWallet(keeper.publicKey, owner, m)]
+      : [ix.settle(owner, m)];
+    const r = await sendWithKeypairs(er, ixs, [keeper], { withLogs: true, skipPreflight: !wallet });
     stats.settles++;
     for (const ev of parseEvents(r.logs)) {
       if (ev.kind !== "TapSettled") continue;
@@ -107,11 +118,24 @@ async function settle(owner: PublicKey, m: MarketKeys, key: string) {
       log(`settled ${m.symbol} ${owner.toBase58().slice(0, 6)} #${ev.id} ${ev.outcome} paid ${Number(ev.payout) / 1e6} (${r.ms.toFixed(0)}ms)`);
     }
   } catch (e) {
-    stats.settleErrors++;
-    log("settle error", m.symbol, owner.toBase58().slice(0, 6), explainError(e));
+    const msg = explainError(e);
+    if (wallet && /settled yet/i.test(msg)) {
+      backoff.set(key, Date.now() + 1500); // stake still on its way from the wallet
+    } else {
+      stats.settleErrors++;
+      log("settle error", m.symbol, owner.toBase58().slice(0, 6), msg);
+    }
   } finally {
     inflight.delete(key);
   }
+}
+
+// ---------- the escrow that pays for Magic Actions on Solana ----------
+async function fundEscrow() {
+  const lamports = await base.getBalance(actionEscrowPda());
+  if (lamports >= config.escrowMinLamports) return;
+  await sendWithKeypairs(base, [ix.topUpActionEscrow(keeper.publicKey, BigInt(config.escrowTopUpLamports))], [keeper], { pollMs: 400 });
+  log(`topped up the action escrow to ${(lamports + config.escrowTopUpLamports) / LAMPORTS_PER_SOL} SOL`);
 }
 
 function settleLoop() {
@@ -246,5 +270,7 @@ for (const m of markets) {
 }
 settleLoop();
 serve();
+void fundEscrow().catch((e) => log("escrow top-up failed", explainError(e)));
+setInterval(() => void fundEscrow().catch((e) => log("escrow top-up failed", explainError(e))), 5 * 60_000);
 if (bots.length) startCrowd(er, bots, markets, log);
 setInterval(() => log(`ticks ${stats.ticks} (last ${stats.lastTickMs}ms, ${stats.tickErrors} err) settles ${stats.settles} W/L/V ${stats.wins}/${stats.losses}/${stats.voids} players ${stats.players} open ${stats.openTaps}`), 30_000);
