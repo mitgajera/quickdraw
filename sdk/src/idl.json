@@ -2400,36 +2400,41 @@
     },
     {
       "code": 6015,
+      "name": "ColumnTaken",
+      "msg": "You already have a tap in this column"
+    },
+    {
+      "code": 6016,
       "name": "NoOpenTap",
       "msg": "No open tap in this slot"
     },
     {
-      "code": 6016,
+      "code": 6017,
       "name": "SettleTooEarly",
       "msg": "This tap cannot be settled yet"
     },
     {
-      "code": 6017,
+      "code": 6018,
       "name": "LiquidityLocked",
       "msg": "Liquidity is committed to open taps"
     },
     {
-      "code": 6018,
+      "code": 6019,
       "name": "WrongMint",
       "msg": "Only devnet USDC is accepted"
     },
     {
-      "code": 6019,
+      "code": 6020,
       "name": "WalletTooLow",
       "msg": "Not enough USDC in the wallet for this stake"
     },
     {
-      "code": 6020,
+      "code": 6021,
       "name": "AllowanceTooLow",
       "msg": "Approve Quickdraw to spend your USDC first"
     },
     {
-      "code": 6021,
+      "code": 6022,
       "name": "NotMagicAction",
       "msg": "Only a Quickdraw Magic Action may call this"
     }
