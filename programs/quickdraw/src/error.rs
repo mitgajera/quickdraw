@@ -32,6 +32,8 @@ pub enum QuickdrawError {
     ExposureLimit,
     #[msg("All tap slots are in use")]
     TooManyTaps,
+    #[msg("You already have a tap in this column")]
+    ColumnTaken,
     #[msg("No open tap in this slot")]
     NoOpenTap,
     #[msg("This tap cannot be settled yet")]

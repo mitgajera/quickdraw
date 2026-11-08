@@ -110,6 +110,11 @@ impl Player {
         *signer == self.owner || (*signer == self.session && now < self.session_expires)
     }
 
+    /// One box per column: whether an open tap already covers this market's window starting at `start`.
+    pub fn has_tap_in_column(&self, market: &Pubkey, start: i64) -> bool {
+        self.taps.iter().any(|t| t.open && t.market == *market && t.start == start)
+    }
+
     pub fn free_slot(&self) -> Option<usize> {
         self.taps.iter().position(|t| !t.open)
     }

@@ -148,6 +148,7 @@ pub fn place_tap_handler(
     );
 
     let player = &mut accounts.player;
+    require!(!player.has_tap_in_column(&accounts.market.key(), q.start), QuickdrawError::ColumnTaken);
     let slot = player.free_slot().ok_or(QuickdrawError::TooManyTaps)?;
     player.balance = player
         .balance

@@ -145,6 +145,7 @@ pub fn place_wallet_tap_handler<'info>(
     require!(has_capacity(&accounts.book, stake, q.payout), QuickdrawError::ExposureLimit);
 
     let player = &mut accounts.player;
+    require!(!player.has_tap_in_column(&accounts.market.key(), q.start), QuickdrawError::ColumnTaken);
     let slot = player.free_slot().ok_or(QuickdrawError::TooManyTaps)?;
     let id = (player.next_id & !WALLET_TAP_FLAG) | WALLET_TAP_FLAG;
     player.next_id = player.next_id.wrapping_add(1) & !WALLET_TAP_FLAG;
