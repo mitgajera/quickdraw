@@ -2,9 +2,10 @@
 
 **Fastest tap wins.**
 
-Tap trading on Solana. A live price chart becomes a grid of boxes; tap the box you think the price will hit. If it touches your box in time, you win at that box's multiplier. Every tap is a real on-chain trade, confirmed in milliseconds on a MagicBlock ephemeral rollup with Pyth prices, and settled back to Solana.
+Tap trading on Solana. A live price chart becomes a grid of boxes; tap the box you think the price will hit. If it touches your box in time, you win at that box's multiplier. Every tap is a real on-chain trade, confirmed in milliseconds on a MagicBlock ephemeral rollup with Pyth prices. Your USDC never leaves your wallet until you tap, and winnings land straight back in it.
 
 - **Instant:** sign in with Google or X, no wallet popups, no gas: the house covers every fee and taps land on the rollup in milliseconds.
+- **No deposits:** stakes are taken from your wallet only when you tap, and wins are paid straight to it, by MagicBlock Magic Actions the program schedules from the rollup.
 - **Provably fair:** odds are computed on-chain and every result is settled from on-chain price data.
 - **An open house:** the bankroll is an on-chain LP pool with shares (`lp_add` / `lp_remove`) that earns the edge; an LP screen in the app is next.
 - **Multiplayer:** see everyone's taps land live.
@@ -17,6 +18,23 @@ Built for the [MLH x Solana Hackathon](https://events.mlh.com/events/15200-solan
 - Plays with Circle's devnet USDC (`4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`). New players get a little starter USDC from the keeper while its budget lasts; more is free at [faucet.circle.com](https://faucet.circle.com/) (USDC, Solana Devnet).
 - Sign-in and wallets: [Privy](https://privy.io) embedded Solana wallets that sign without popups.
 - Taps and settlement run on MagicBlock's Asia ephemeral rollup (`devnet-as.magicblock.app`).
+
+## How money moves (wallet play)
+
+1. **Sign-in (Solana, one silent transaction):** the wallet approves the house vault PDA to spend its USDC
+   (SPL `approve`; nothing moves), opens a `Ledger`, and delegates the player account to the rollup.
+2. **Tap (rollup, ~150–250 ms):** `place_wallet_tap` reads a live copy of the wallet's token account,
+   checks balance and allowance against stakes still in flight, prices the box, records the tap, and
+   schedules a **Magic Action**: `collect_stake` runs on Solana about a second later, moving the stake
+   from the wallet to the vault and marking it collected in the ledger.
+3. **Settle (rollup):** `settle_wallet` judges taps from the on-chain candle ring. A win only pays once
+   the ledger shows its stake collected; it schedules a second Magic Action, `pay_out`, that sends the
+   payout straight to the wallet. A stake that never arrives voids its tap.
+
+`collect_stake` and `pay_out` move value, so they only run when the delegation program invokes them with
+the escrow of the program's own `escrow-auth` PDA as signer (anyone else calling them is rejected). The
+keeper keeps that escrow funded with SOL for the Solana fees. `pnpm --filter @quickdraw/keeper e2e:wallet`
+runs the whole loop on devnet.
 
 ## Layout
 
