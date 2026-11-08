@@ -13,6 +13,17 @@ export const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? "cmw7jsye300
 
 /** How long to wait for Privy's own create-on-login before creating the wallet ourselves. */
 const CREATE_GRACE_MS = 2500;
+/** How long a signature may wait for Privy's signing iframe to finish booting. */
+const WALLET_WAIT_MS = 20_000;
+
+/** Polls `get` until it returns a value or `ms` passes. */
+async function waitFor<T>(get: () => T | undefined, ms: number): Promise<T | undefined> {
+  const end = Date.now() + ms;
+  for (let v = get(); ; v = get()) {
+    if (v !== undefined || Date.now() > end) return v;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+}
 
 export function usePrivySigner() {
   const { ready, authenticated, login, logout, user, getAccessToken } = usePrivy();
@@ -30,16 +41,25 @@ export function usePrivySigner() {
   const wallet = authenticated
     ? wallets.find((w) => w.standardWallet?.name?.toLowerCase().includes("privy")) ?? wallets[0]
     : undefined;
-  const address = wallet?.address;
+  const walletRef = useRef(wallet);
+  walletRef.current = wallet;
 
-  // The dashboard's embedded-wallet setting can override createOnLogin; if no Solana wallet shows up
-  // shortly after sign-in, create it here so the player is never stuck on "Creating wallet…".
-  const hasSolanaAccount = !!user?.linkedAccounts.some(
-    (a) => a.type === "wallet" && "chainType" in a && a.chainType === "solana",
-  );
+  // Privy knows the wallet's address the moment sign-in finishes (it is on the user record), well
+  // before its signing iframe has booted. Use it straight away so the app never waits on "Creating
+  // wallet…" for a wallet that already exists; only an actual signature waits for the iframe.
+  const linked = authenticated
+    ? user?.linkedAccounts.find(
+      (a): a is Extract<typeof a, { type: "wallet" }> =>
+        a.type === "wallet" && "chainType" in a && a.chainType === "solana" && a.walletClientType === "privy",
+    )
+    : undefined;
+  const address = wallet?.address ?? linked?.address;
+
+  // If no Solana wallet shows up shortly after sign-in (the dashboard setting can override
+  // createOnLogin), create it here so the player is never stuck on "Creating wallet…".
   const creating = useRef(false);
   useEffect(() => {
-    if (!ready || !authenticated || !walletsReady || address || hasSolanaAccount || creating.current) return;
+    if (!ready || !authenticated || !walletsReady || address || creating.current) return;
     const t = setTimeout(() => {
       creating.current = true;
       setWalletError(null);
@@ -48,19 +68,21 @@ export function usePrivySigner() {
         .finally(() => { creating.current = false; });
     }, CREATE_GRACE_MS);
     return () => clearTimeout(t);
-  }, [ready, authenticated, walletsReady, address, hasSolanaAccount, createWallet]);
+  }, [ready, authenticated, walletsReady, address, createWallet]);
   useEffect(() => { if (address) setWalletError(null); }, [address]);
 
   const signer = useMemo<AppSigner | null>(() => {
-    if (!wallet || !address) return null;
+    if (!address) return null;
     return {
       kind: "wallet",
       publicKey: new PublicKey(address),
       signTransaction: async (tx: Transaction) => {
+        const w = await waitFor(() => (walletRef.current?.address === address ? walletRef.current : undefined), WALLET_WAIT_MS);
+        if (!w) throw new Error("Your wallet is still loading. Try again in a moment.");
         const bytes = tx.serialize({ requireAllSignatures: false, verifySignatures: false });
         const { signedTransaction } = await signRef.current({
           transaction: new Uint8Array(bytes),
-          wallet,
+          wallet: w,
           chain: "solana:devnet",
           options: { uiOptions: { showWalletUIs: false } },
         });
@@ -68,13 +90,11 @@ export function usePrivySigner() {
       },
       authToken: () => tokenRef.current(),
     };
-    // re-create only when the wallet itself changes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [address]);
 
   const name = user?.google?.name ?? user?.twitter?.username ?? user?.google?.email ?? null;
   return {
-    ready: ready && (!authenticated || walletsReady), authenticated, login, logout, signer, name, walletError,
+    ready, authenticated, login, logout, signer, name, walletError,
     retryWallet: () => { creating.current = false; setWalletError(null); void createWallet().catch((e) => setWalletError(`Could not create your wallet: ${explainError(e)}`)); },
   };
 }

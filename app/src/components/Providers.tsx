@@ -14,7 +14,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       appId={PRIVY_APP_ID}
       config={{
         loginMethods: ["google", "twitter"],
-        appearance: { theme: "dark", accentColor: "#FFB224", walletChainType: "solana-only", landingHeader: "Sign in to Quickdraw" },
+        appearance: { theme: "dark", accentColor: "#3DD68C", walletChainType: "solana-only", landingHeader: "Sign in to Quickdraw" },
         embeddedWallets: {
           ethereum: { createOnLogin: "off" },
           solana: { createOnLogin: "all-users" },
