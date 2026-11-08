@@ -4,7 +4,7 @@ export const alt = "Quickdraw — fastest tap wins. Tap trading on Solana.";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-const BG = "#0E0F11", PANEL = "#16181C", LINE = "#2A2D33", INK = "#ECEDEE", MUTE = "#8B8F98", ACCENT = "#FFB224";
+const BG = "#0A0A0C", PANEL = "#121215", LINE = "#222228", INK = "#F2F2F4", MUTE = "#8B8B94", ACCENT = "#F2F2F4", WIN = "#3DD68C";
 
 // a static slice of the board: multipliers grow away from the price, one box hit
 const ROWS = [
@@ -23,11 +23,10 @@ export default function OpengraphImage() {
         <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", width: 560 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
             <svg width="64" height="64" viewBox="0 0 32 32">
-              <rect width="32" height="32" rx="7" fill={ACCENT} />
-              <rect x="19" y="5" width="9" height="9" rx="1.8" fill={BG} />
-              <path d="M5 25 L11 18 L15.5 21 L21 13.5" fill="none" stroke={BG} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M2.5 20.5 H7.5 L11 12.5 L15 25 L27 8" fill="none" stroke={INK} strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M19.5 7.5 H27.5 V15.5" fill="none" stroke={INK} strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            <div style={{ fontSize: 44, fontWeight: 700, letterSpacing: 8 }}>QUICKDRAW</div>
+            <div style={{ fontSize: 46, fontWeight: 700, letterSpacing: -1 }}>Quickdraw</div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
             <div style={{ fontSize: 76, fontWeight: 700, lineHeight: 1.05 }}>Fastest tap wins.</div>
@@ -36,11 +35,11 @@ export default function OpengraphImage() {
             </div>
           </div>
           <div style={{ display: "flex", gap: 14, fontSize: 24 }}>
-            <div style={{ display: "flex", border: `2px solid ${ACCENT}`, color: ACCENT, padding: "8px 16px" }}>SOLANA DEVNET</div>
-            <div style={{ display: "flex", border: `2px solid ${LINE}`, color: MUTE, padding: "8px 16px" }}>SOL · BTC · ETH</div>
+            <div style={{ display: "flex", border: `2px solid ${LINE}`, color: INK, padding: "8px 16px", borderRadius: 999 }}>Solana devnet</div>
+            <div style={{ display: "flex", border: `2px solid ${LINE}`, color: MUTE, padding: "8px 16px", borderRadius: 999 }}>SOL · BTC · ETH</div>
           </div>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", marginLeft: 56, flex: 1, background: PANEL, border: `2px solid ${LINE}`, padding: 18, gap: 8 }}>
+        <div style={{ display: "flex", flexDirection: "column", marginLeft: 56, flex: 1, background: PANEL, border: `2px solid ${LINE}`, padding: 18, gap: 8, borderRadius: 24 }}>
           {ROWS.map((row, i) => (
             <div key={i} style={{ display: "flex", gap: 8, flex: 1 }}>
               {row.map((v, j) => {
@@ -48,8 +47,8 @@ export default function OpengraphImage() {
                 return (
                   <div key={j} style={{
                     flex: 1, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 30,
-                    border: `2px solid ${hit ? ACCENT : LINE}`, background: hit ? ACCENT : "transparent",
-                    color: hit ? BG : v.length > 3 || v === "·" ? MUTE : ACCENT, fontWeight: hit ? 700 : 400,
+                    border: `1px solid ${LINE}`, borderRadius: 12, background: hit ? "rgba(61,214,140,.16)" : "transparent",
+                    color: hit ? WIN : v === "·" ? MUTE : parseFloat(v) < 3 || parseFloat(v) >= 10 ? INK : MUTE, fontWeight: hit ? 700 : 400,
                   }}>{hit ? "+$4.20" : v}</div>
                 );
               })}
