@@ -110,3 +110,14 @@ export function decodeOracle(data: Uint8Array): OraclePrice {
   const b = buf(data);
   return { price: b.readBigInt64LE(73), publishTime: Number(b.readBigInt64LE(93)) };
 }
+
+/** Wallet play: which wallet-tap stakes the house has collected (base layer). */
+export interface Ledger { owner: PublicKey; collected: number[]; head: number; collectedTotal: bigint; paidTotal: bigint }
+
+export function decodeLedger(data: Uint8Array): Ledger {
+  const r = new Reader(buf(data));
+  const owner = r.pk();
+  const collected: number[] = [];
+  for (let i = 0; i < 32; i++) collected.push(r.u32());
+  return { owner, collected, head: r.u8(), collectedTotal: r.u64(), paidTotal: r.u64() };
+}

@@ -8,6 +8,34 @@
   },
   "instructions": [
     {
+      "name": "collect_stake",
+      "discriminator": [
+        152,
+        72,
+        39,
+        87,
+        198,
+        163,
+        206,
+        18
+      ],
+      "accounts": [],
+      "args": [
+        {
+          "name": "owner",
+          "type": "pubkey"
+        },
+        {
+          "name": "tap_id",
+          "type": "u32"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "delegate_book",
       "discriminator": [
         175,
@@ -793,6 +821,54 @@
       ]
     },
     {
+      "name": "init_ledger",
+      "discriminator": [
+        91,
+        194,
+        32,
+        83,
+        92,
+        206,
+        54,
+        67
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "ledger",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  101,
+                  100,
+                  103,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "init_market",
       "discriminator": [
         33,
@@ -1055,6 +1131,30 @@
       ]
     },
     {
+      "name": "pay_out",
+      "discriminator": [
+        122,
+        7,
+        14,
+        119,
+        71,
+        188,
+        166,
+        34
+      ],
+      "accounts": [],
+      "args": [
+        {
+          "name": "owner",
+          "type": "pubkey"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "place_tap",
       "discriminator": [
         90,
@@ -1140,6 +1240,199 @@
         },
         {
           "name": "oracle"
+        }
+      ],
+      "args": [
+        {
+          "name": "band_index",
+          "type": "i64"
+        },
+        {
+          "name": "column",
+          "type": "i64"
+        },
+        {
+          "name": "zoom",
+          "type": "u8"
+        },
+        {
+          "name": "stake",
+          "type": "u64"
+        },
+        {
+          "name": "min_mult_bps",
+          "type": "u32"
+        }
+      ]
+    },
+    {
+      "name": "place_wallet_tap",
+      "discriminator": [
+        229,
+        91,
+        146,
+        55,
+        70,
+        187,
+        104,
+        164
+      ],
+      "accounts": [
+        {
+          "name": "signer",
+          "docs": [
+            "The player's owner or their active session key; pays nothing (rollup transactions are free)."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "player",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "player.owner",
+                "account": "Player"
+              }
+            ]
+          }
+        },
+        {
+          "name": "book",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  111,
+                  107
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "market",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  107,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market.oracle",
+                "account": "Market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "candles"
+        },
+        {
+          "name": "oracle"
+        },
+        {
+          "name": "ledger",
+          "docs": [
+            "Live copy of the base-layer ledger: which earlier stakes have been collected."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  101,
+                  100,
+                  103,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "player.owner",
+                "account": "Player"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_tokens",
+          "docs": [
+            "Live copy of the player's USDC token account on Solana."
+          ]
+        },
+        {
+          "name": "vault",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "escrow_auth",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119,
+                  45,
+                  97,
+                  117,
+                  116,
+                  104
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "magic_program",
+          "address": "Magic11111111111111111111111111111111111111"
+        },
+        {
+          "name": "magic_context",
+          "writable": true,
+          "address": "MagicContext1111111111111111111111111111111"
         }
       ],
       "args": [
@@ -1441,6 +1734,149 @@
         },
         {
           "name": "candles"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "settle_wallet",
+      "discriminator": [
+        125,
+        32,
+        119,
+        144,
+        135,
+        73,
+        234,
+        69
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "docs": [
+            "Whoever cranks settlement (the keeper or the player's own app)."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "player",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  108,
+                  97,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "player.owner",
+                "account": "Player"
+              }
+            ]
+          }
+        },
+        {
+          "name": "book",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  111,
+                  107
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "market",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  107,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market.oracle",
+                "account": "Market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "candles"
+        },
+        {
+          "name": "ledger",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  101,
+                  100,
+                  103,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "player.owner",
+                "account": "Player"
+              }
+            ]
+          }
+        },
+        {
+          "name": "escrow_auth",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119,
+                  45,
+                  97,
+                  117,
+                  116,
+                  104
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "magic_program",
+          "address": "Magic11111111111111111111111111111111111111"
+        },
+        {
+          "name": "magic_context",
+          "writable": true,
+          "address": "MagicContext1111111111111111111111111111111"
         }
       ],
       "args": []
@@ -1815,6 +2251,19 @@
       ]
     },
     {
+      "name": "Ledger",
+      "discriminator": [
+        43,
+        41,
+        21,
+        213,
+        180,
+        176,
+        95,
+        32
+      ]
+    },
+    {
       "name": "Market",
       "discriminator": [
         219,
@@ -1964,6 +2413,21 @@
       "code": 6018,
       "name": "WrongMint",
       "msg": "Only devnet USDC is accepted"
+    },
+    {
+      "code": 6019,
+      "name": "WalletTooLow",
+      "msg": "Not enough USDC in the wallet for this stake"
+    },
+    {
+      "code": 6020,
+      "name": "AllowanceTooLow",
+      "msg": "Approve Quickdraw to spend your USDC first"
+    },
+    {
+      "code": 6021,
+      "name": "NotMagicAction",
+      "msg": "Only a Quickdraw Magic Action may call this"
     }
   ],
   "types": [
@@ -2143,6 +2607,51 @@
                 256
               ]
             }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Ledger",
+      "docs": [
+        "Wallet play: the base-layer record of which wallet-tap stakes the house has collected from the",
+        "player's own token account, and how much it has paid back. Never delegated, so the ER reads a",
+        "live copy of it: a winning wallet tap only pays once its stake shows up here as collected."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "collected",
+            "docs": [
+              "Ids (with `WALLET_TAP_FLAG`) of the most recent collected stakes, oldest overwritten first."
+            ],
+            "type": {
+              "array": [
+                "u32",
+                32
+              ]
+            }
+          },
+          {
+            "name": "head",
+            "type": "u8"
+          },
+          {
+            "name": "collected_total",
+            "type": "u64"
+          },
+          {
+            "name": "paid_total",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
           }
         ]
       }

@@ -34,6 +34,10 @@ export const MIN_VOL_SAMPLES = 5;
 export const MAX_ZOOM = 4;
 export const CANDLE_SLOTS = 256;
 export const MAX_TAPS = 12;
+/** Set on the id of a tap paid straight from the wallet. */
+export const WALLET_TAP_FLAG = 0x8000_0000;
+/** Allowance the wallet grants the house vault at sign-in (re-approved when it runs low). */
+export const WALLET_ALLOWANCE = 1_000_000_000n; // 1,000 USDC
 export const ONE_X_BPS = 10_000;
 export const SETTLE_TIMEOUT_SECS = 30;
 

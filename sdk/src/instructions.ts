@@ -1,10 +1,11 @@
 // IDL-driven instruction builders. Account lists, PDAs and discriminators come straight from the
 // Anchor IDL, so the client cannot drift from the program.
 import { Buffer } from "buffer";
-import { PublicKey, TransactionInstruction } from "@solana/web3.js";
+import { PublicKey, SystemProgram, TransactionInstruction } from "@solana/web3.js";
 import idlJson from "./idl.json";
 import { ER_VALIDATOR, PROGRAM_ID, USDC_MINT } from "./constants";
-import { ataOf, bookPda, playerPda, type MarketKeys } from "./pdas";
+import { DELEGATION_PROGRAM_ID, TOKEN_PROGRAM_ID } from "./constants";
+import { actionEscrowPda, ataOf, bookPda, escrowAuthPda, ledgerPda, playerPda, vaultPda, type MarketKeys } from "./pdas";
 
 type IdlType = string | { array: [IdlType, number] } | { defined: { name: string } | string };
 interface IdlSeed { kind: "const" | "account" | "arg"; value?: number[]; path?: string }
@@ -150,5 +151,55 @@ export const ix = {
     buildIx("delegate_player", playerAccounts(owner), {}, [validator]),
   undelegatePlayer: (owner: PublicKey) => buildIx("undelegate_player", playerAccounts(owner)),
   lpAdd: (owner: PublicKey, amount: bigint) => buildIx("lp_add", playerAccounts(owner), { amount }),
+
+  // wallet play
+  initLedger: (owner: PublicKey) => buildIx("init_ledger", { ...playerAccounts(owner), ledger: ledgerPda(owner) }),
+  placeWalletTap: (a: {
+    signer: PublicKey; owner: PublicKey; market: MarketKeys;
+    bandIndex: bigint; column: number; zoom: number; stake: bigint; minMultBps: number;
+  }) =>
+    buildIx("place_wallet_tap", {
+      ...playerAccounts(a.owner), ...marketAccounts(a.market), signer: a.signer,
+      ledger: ledgerPda(a.owner), vault: vaultPda(), escrow_auth: escrowAuthPda(),
+    }, { band_index: a.bandIndex, column: a.column, zoom: a.zoom, stake: a.stake, min_mult_bps: a.minMultBps }),
+  settleWallet: (payer: PublicKey, owner: PublicKey, m: MarketKeys) =>
+    buildIx("settle_wallet", {
+      ...playerAccounts(owner), ...marketAccounts(m), payer, ledger: ledgerPda(owner), escrow_auth: escrowAuthPda(),
+    }),
+  /**
+   * Delegation program `TopUpEphemeralBalance`: funds the SOL escrow that pays for this program's
+   * Magic Actions on Solana (escrow of the `escrow-auth` PDA, index 255).
+   */
+  topUpActionEscrow: (payer: PublicKey, lamports: bigint) => {
+    const data = Buffer.alloc(17);
+    data.writeBigUInt64LE(9n, 0); // DlpDiscriminator::TopUpEphemeralBalance
+    data.writeBigUInt64LE(lamports, 8);
+    data.writeUInt8(255, 16);
+    return new TransactionInstruction({
+      programId: DELEGATION_PROGRAM_ID,
+      keys: [
+        { pubkey: payer, isSigner: true, isWritable: true },
+        { pubkey: escrowAuthPda(), isSigner: false, isWritable: false },
+        { pubkey: actionEscrowPda(), isSigner: false, isWritable: true },
+        { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      ],
+      data,
+    });
+  },
+  /** SPL `Approve`: lets the house vault PDA spend up to `amount` of the wallet's USDC. */
+  approveVault: (owner: PublicKey, amount: bigint) => {
+    const data = Buffer.alloc(9);
+    data.writeUInt8(4, 0);
+    data.writeBigUInt64LE(amount, 1);
+    return new TransactionInstruction({
+      programId: TOKEN_PROGRAM_ID,
+      keys: [
+        { pubkey: ataOf(owner), isSigner: false, isWritable: true },
+        { pubkey: vaultPda(), isSigner: false, isWritable: false },
+        { pubkey: owner, isSigner: true, isWritable: false },
+      ],
+      data,
+    });
+  },
   lpRemove: (owner: PublicKey, shares: bigint) => buildIx("lp_remove", playerAccounts(owner), { shares }),
 };
