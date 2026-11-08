@@ -30,7 +30,7 @@ interface Props {
   /** Tapped while the player cannot tap yet (not connected or not set up). */
   onBlocked?: () => void;
   /** Tapped a box the house does not offer right now. */
-  onReject?: (reason: "locked" | "too-far" | "unpriced" | "range", side: "near" | "far") => void;
+  onReject?: (reason: "locked" | "too-far" | "unpriced" | "range" | "limit", side: "near" | "far") => void;
 }
 
 export function Board({ model, stake, canTap, onTap, onReject, onBlocked }: Props) {
@@ -70,7 +70,8 @@ export function Board({ model, stake, canTap, onTap, onReject, onBlocked }: Prop
     const quoteAt = (k: number, j: number) => {
       const { market, book, price, publishTime, candles } = model;
       if (!market || !book || price === null) return null;
-      return quoteBox(book, boxAt(market, BigInt(j), k, model.zoom), price, publishTime, sigmaFor(market, candles, publishTime));
+      const stake = BigInt(Math.round(props.current.stake * 1e6));
+      return quoteBox(book, boxAt(market, BigInt(j), k, model.zoom), price, publishTime, sigmaFor(market, candles, publishTime), stake);
     };
 
     const offResult = model.onResult((r: Result) => {
@@ -160,15 +161,24 @@ export function Board({ model, stake, canTap, onTap, onReject, onBlocked }: Prop
       }
       const fs = clamp(rowPx * 0.3, 11, 14);
       ctx.font = `500 ${fs}px ${monoFont}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      const stakeUnits = BigInt(Math.round(props.current.stake * 1e6));
       for (let k = kNow; k <= kMax; k++) {
         const x0 = Math.max(xOf(k * col), nowX), x1 = xOf((k + 1) * col);
         if (x1 <= nowX) continue;
         for (let j = jMin; j <= jMax; j++) {
           const y0 = yOf((j + 1) * band), y1 = yOf(j * band), w = x1 - x0, h = y1 - y0;
           const box = boxAt(market, BigInt(j), k, model.zoom);
-          const q = quoteBox(book, box, price, model.publishTime, sigma);
+          const q = quoteBox(book, box, price, model.publishTime, sigma, stakeUnits);
           const n = heat.get(`${k}:${box.lo}`) ?? 0;
           if (n) { ctx.fillStyle = rgba(T.accent, Math.min(0.16, n * 0.04)); ctx.fillRect(x0, y0, w, h); }
+          if (!q.ok && q.reason === "limit") {
+            // priced, but over the house's limits at this stake: show it struck through
+            ctx.fillStyle = rgba(T.mute, 0.45);
+            const label = fmtMult(q.multBps), tw = ctx.measureText(label).width;
+            ctx.fillText(label, x0 + w / 2, y0 + h / 2 + 0.5);
+            ctx.fillRect(x0 + w / 2 - tw / 2 - 2, y0 + h / 2, tw + 4, 1);
+            continue;
+          }
           if (!q.ok) {
             if (q.reason === "locked") { ctx.fillStyle = rgba(T.ink, 0.025); ctx.fillRect(x0, y0, w, h); }
             ctx.fillStyle = rgba(T.mute, 0.35); ctx.beginPath(); ctx.arc(x0 + w / 2, y0 + h / 2, 1.5, 0, Math.PI * 2); ctx.fill();

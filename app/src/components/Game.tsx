@@ -103,6 +103,7 @@ export function Game() {
   const onReject = useCallback((reason: string, side: "near" | "far") => {
     say(reason === "locked" ? "That column is about to open — tap one further right"
       : reason === "too-far" ? "That column is more than two minutes out"
+      : reason === "limit" ? "Over the house's limit at this stake — lower the stake or pick a lower multiplier"
       : side === "near" ? "Too close to call — no payout offered on that box"
       : "Beyond the house's top multiplier — pick a box closer to the price");
   }, [say]);
