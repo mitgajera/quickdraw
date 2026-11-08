@@ -7,7 +7,7 @@ import { LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
 import { BASE_RPC, USDC_MINT, ataOf, decodePlayer, explainError, playerPda } from "@quickdraw/sdk";
 import { LogoMark } from "./Logo";
 import { decodeTokenAccount, useAccount, VAULT_HEX } from "@/lib/account";
-import { base, er } from "@/lib/chain";
+import { base, er, prefs } from "@/lib/chain";
 import { usePrivySigner } from "@/lib/privy";
 
 const usd = (v: bigint | number) => {
@@ -160,6 +160,26 @@ export function Profile() {
           </section>
         </div>
 
+        <div className="pcol">
+          <section className="card pad">
+            <h3 className="h3">Achievements</h3>
+            <div className="badges">
+              {achievements(stats, receipts).map((a) => (
+                <div key={a.name} className={`badge-a${a.done ? " done" : ""}`} title={a.how}>
+                  <span className="bi" aria-hidden="true">{a.done ? a.icon : "·"}</span>
+                  <span className="bn">{a.name}</span>
+                  <span className="bh">{a.how}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+          <section className="card pad">
+            <h3 className="h3">Responsible play</h3>
+            <p className="muted">Pause tapping in this browser once a session is down this much. A session starts when you open the game.</p>
+            <LossLimit />
+          </section>
+        </div>
+
         <section className="card pad receipts">
           <div className="h3row"><h3 className="h3">On-chain receipts</h3><button className="linkbtn" onClick={() => void refresh()}>Refresh</button></div>
           <p className="muted small">Every USDC movement on your wallet, read from Solana devnet.</p>
@@ -178,6 +198,34 @@ export function Profile() {
         </section>
       </div>
     </Shell>
+  );
+}
+
+interface Achievement { name: string; how: string; icon: string; done: boolean }
+function achievements(stats: { taps: number; wins: number; best: number; pnl: bigint } | null, receipts: Receipt[] | null): Achievement[] {
+  const s = stats ?? { taps: 0, wins: 0, best: 0, pnl: 0n };
+  const bigWin = (receipts ?? []).some((r) => r.kind === KIND.PayOut && r.delta >= 10);
+  return [
+    { name: "First tap", how: "Place a tap", icon: "◆", done: s.taps >= 1 },
+    { name: "First win", how: "Win a tap", icon: "✓", done: s.wins >= 1 },
+    { name: "Hot hand", how: "3 wins in a row", icon: "▲", done: s.best >= 3 },
+    { name: "On fire", how: "5 wins in a row", icon: "★", done: s.best >= 5 },
+    { name: "Century", how: "100 taps", icon: "C", done: s.taps >= 100 },
+    { name: "Sharpshooter", how: "25 wins", icon: "◎", done: s.wins >= 25 },
+    { name: "In the green", how: "Overall P&L above zero", icon: "+", done: s.pnl > 0n },
+    { name: "Big payout", how: "A single payout of $10+", icon: "$", done: bigWin },
+  ];
+}
+
+function LossLimit() {
+  const [limit, setLimit] = useState(0);
+  useEffect(() => setLimit(prefs.lossLimit()), []);
+  return (
+    <div className="seg block" role="group" aria-label="Session loss limit">
+      {[0, 10, 25, 50].map((d) => (
+        <button key={d} aria-pressed={limit === d} onClick={() => { prefs.setLossLimit(d); setLimit(d); }}>{d === 0 ? "Off" : `$${d}`}</button>
+      ))}
+    </div>
   );
 }
 
