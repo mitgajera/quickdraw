@@ -32,7 +32,7 @@ a { color: inherit; }
 .app { max-width: 1240px; margin: 0 auto; padding: 0 16px 32px; }
 .top { display: flex; align-items: center; gap: 18px; padding: 14px 0; }
 .logo { display: flex; align-items: center; gap: 9px; }
-.mark { width: 12px; height: 12px; background: var(--accent); }
+.logomark { display: block; flex: none; }
 .word { font-weight: 700; font-size: 18px; letter-spacing: 0.12em; text-transform: uppercase; }
 .mkts { display: flex; gap: 4px; margin-left: 10px; }
 .mkt {

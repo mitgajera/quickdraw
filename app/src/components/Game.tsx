@@ -5,6 +5,7 @@ import { ComputeBudgetProgram, Transaction } from "@solana/web3.js";
 import { ER_RPC, PROGRAM_ID, explainError, ix, playerPda, rowHeight, sendSigned, type Symbol } from "@quickdraw/sdk";
 import type { PublicKey } from "@solana/web3.js";
 import { Board } from "./Board";
+import { LogoMark } from "./Logo";
 import { NEEDS_USDC, useAccount, type Stage } from "@/lib/account";
 import { erBlockhash, er, prefs, sessionKey, type AppSigner } from "@/lib/chain";
 import { LiveModel, type Result } from "@/lib/live";
@@ -158,7 +159,7 @@ export function Game() {
   return (
     <main className="app">
       <header className="top">
-        <div className="logo"><span className="mark" /><span className="word">Quickdraw</span></div>
+        <div className="logo"><LogoMark /><span className="word">Quickdraw</span></div>
         <nav className="mkts" aria-label="Markets">
           {SYMBOLS.map((s) => (
             <button key={s} className="mkt" aria-pressed={s === symbol} onClick={() => setSymbol(s)}>{s}</button>
