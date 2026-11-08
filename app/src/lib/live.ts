@@ -169,7 +169,9 @@ export class LiveModel {
     if (price === this.price && publishTime === this.publishTime) return;
     this.price = price;
     this.publishTime = publishTime;
-    this.hist.push({ t: now - this.clockOffset, p: Number(price) / 1e8 });
+    // never step back in time (the clock offset is a rolling minimum and can grow)
+    const prevT = this.hist.at(-1)?.t ?? -Infinity;
+    this.hist.push({ t: Math.max(now - this.clockOffset, prevT + 0.001), p: Number(price) / 1e8 });
     while (this.hist.length > 2 && this.hist[0]!.t < now - 120) this.hist.shift();
   }
 
@@ -246,20 +248,27 @@ export class LiveModel {
     if (++this.zoomVotes >= 3 || this.hist.length < 10) { this.zoom = ideal; this.zoomVotes = 0; }
   }
 
-  /** Seeds the chart from the on-chain candle ring so it is never empty on load. */
+  /**
+   * Seeds the chart from the on-chain candle ring so it is never empty on load: one midpoint per
+   * recorded second, placed strictly before the first live point and kept in time order (the line is
+   * drawn in array order, so anything out of order doubles back across the chart).
+   */
+  private backfilled = false;
   private backfill(c: Candles) {
-    const now = Date.now() / 1000;
+    if (this.backfilled) return;
+    this.backfilled = true;
     const last = c.lastPublishTime;
+    const firstLive = this.hist[0]?.t ?? Infinity;
+    const shift = Math.max(0, Date.now() / 1000 - this.clockOffset - (last + 1));
     const pts: PricePoint[] = [];
     for (let sec = last - 90; sec <= last; sec++) {
       const i = ((sec % CANDLE_SLOTS) + CANDLE_SLOTS) % CANDLE_SLOTS;
       if (c.secs[i] !== BigInt(sec)) continue;
-      pts.push({ t: sec + 0.25, p: Number(c.lows[i]!) / 1e8 }, { t: sec + 0.75, p: Number(c.highs[i]!) / 1e8 });
+      const t = sec + 0.5 + shift;
+      if (t >= firstLive) break;
+      pts.push({ t, p: (Number(c.lows[i]!) + Number(c.highs[i]!)) / 2e8 });
     }
-    if (pts.length) {
-      const shift = now - this.clockOffset - (last + 1);
-      this.hist = [...pts.map((p) => ({ t: p.t + Math.max(0, shift), p: p.p })), ...this.hist];
-    }
+    if (pts.length) this.hist = [...pts, ...this.hist].sort((a, b) => a.t - b.t);
   }
 
   /** every player's open taps and stats, every 2 seconds */
