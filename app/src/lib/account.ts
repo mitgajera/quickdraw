@@ -4,10 +4,10 @@
 // Rollup transactions are free, so the session key needs no SOL of its own.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Buffer } from "buffer";
-import { LAMPORTS_PER_SOL, type TransactionInstruction } from "@solana/web3.js";
+import { LAMPORTS_PER_SOL, type PublicKey, type TransactionInstruction } from "@solana/web3.js";
 import {
   DELEGATION_PROGRAM_ID, PROGRAM_ID, WALLET_ALLOWANCE, ataOf, buildTx, createAtaIdempotent, decodeLedger, decodePlayer,
-  explainError, ix, ledgerPda, playerPda, sendSigned, vaultPda,
+  explainError, ix, ledgerPda, playerPda, sendSigned, transferTokens, vaultPda,
 } from "@quickdraw/sdk";
 import { KEEPER_URL, base, er, sessionKey, type AppSigner } from "./chain";
 
@@ -19,8 +19,8 @@ const ALLOWANCE_FLOOR = 100_000_000n;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** The parts of an SPL token account the game cares about. */
-interface WalletTokens { amount: bigint; delegate: string | null; delegated: bigint }
-function decodeTokenAccount(data: Uint8Array): WalletTokens {
+export interface WalletTokens { amount: bigint; delegate: string | null; delegated: bigint }
+export function decodeTokenAccount(data: Uint8Array): WalletTokens {
   const b = Buffer.from(data);
   const hasDelegate = b.readUInt32LE(72) === 1;
   return {
@@ -29,7 +29,7 @@ function decodeTokenAccount(data: Uint8Array): WalletTokens {
     delegated: b.readBigUInt64LE(121),
   };
 }
-const VAULT_HEX = Buffer.from(vaultPda().toBytes()).toString("hex");
+export const VAULT_HEX = Buffer.from(vaultPda().toBytes()).toString("hex");
 
 export function useAccount(signer: AppSigner | null) {
   const [stage, setStage] = useState<Stage>("disconnected");
@@ -195,5 +195,22 @@ export function useAccount(signer: AppSigner | null) {
     setLegacyBalance(0n);
   }), [run]);
 
-  return { stage, busy, error, walletUsdc, collected, legacyBalance, activate, withdrawLegacy, recheck: check, refreshWallet: readWallet };
+  /** Sends devnet USDC from the wallet to any Solana address (creating its token account if needed). */
+  const sendUsdc = useCallback((to: PublicKey, amount: bigint) => run(`Sending ${(Number(amount) / 1e6).toFixed(2)} USDC…`, async () => {
+    const owner = signerRef.current!.publicKey;
+    await ensureFunded(false);
+    await send(base, [createAtaIdempotent(owner, to), transferTokens(owner, to, amount)]);
+    await readWallet();
+  }), [run, readWallet]);
+
+  /** Revokes the game's allowance: taps stop until wallet play is set up again. */
+  const pauseWalletPlay = useCallback(() => run("Pausing wallet play…", async () => {
+    await ensureFunded(false);
+    await send(base, [ix.revokeVault(signerRef.current!.publicKey)]);
+  }), [run]);
+
+  return {
+    stage, busy, error, walletUsdc, collected, legacyBalance, activate, withdrawLegacy, recheck: check, refreshWallet: readWallet,
+    sendUsdc, pauseWalletPlay,
+  };
 }

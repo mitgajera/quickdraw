@@ -156,12 +156,15 @@ export const ix = {
   initLedger: (owner: PublicKey) => buildIx("init_ledger", { ...playerAccounts(owner), ledger: ledgerPda(owner) }),
   placeWalletTap: (a: {
     signer: PublicKey; owner: PublicKey; market: MarketKeys;
-    bandIndex: bigint; column: number; zoom: number; stake: bigint; minMultBps: number;
+    bandIndex: bigint; column: number; zoom: number; stake: bigint; minMultBps: number; quotedMultBps: number;
   }) =>
     buildIx("place_wallet_tap", {
       ...playerAccounts(a.owner), ...marketAccounts(a.market), signer: a.signer,
       ledger: ledgerPda(a.owner), vault: vaultPda(), escrow_auth: escrowAuthPda(),
-    }, { band_index: a.bandIndex, column: a.column, zoom: a.zoom, stake: a.stake, min_mult_bps: a.minMultBps }),
+    }, {
+      band_index: a.bandIndex, column: a.column, zoom: a.zoom, stake: a.stake,
+      min_mult_bps: a.minMultBps, quoted_mult_bps: a.quotedMultBps,
+    }),
   settleWallet: (payer: PublicKey, owner: PublicKey, m: MarketKeys) =>
     buildIx("settle_wallet", {
       ...playerAccounts(owner), ...marketAccounts(m), payer, ledger: ledgerPda(owner), escrow_auth: escrowAuthPda(),
@@ -186,6 +189,15 @@ export const ix = {
       data,
     });
   },
+  /** SPL `Revoke`: removes the house vault's allowance on the wallet's USDC. */
+  revokeVault: (owner: PublicKey) => new TransactionInstruction({
+    programId: TOKEN_PROGRAM_ID,
+    keys: [
+      { pubkey: ataOf(owner), isSigner: false, isWritable: true },
+      { pubkey: owner, isSigner: true, isWritable: false },
+    ],
+    data: Buffer.from([5]),
+  }),
   /** SPL `Approve`: lets the house vault PDA spend up to `amount` of the wallet's USDC. */
   approveVault: (owner: PublicKey, amount: bigint) => {
     const data = Buffer.alloc(9);
