@@ -5,3 +5,4 @@ export * from "./odds";
 export * from "./instructions";
 export * from "./events";
 export * from "./send";
+export * from "./token";
