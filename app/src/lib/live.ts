@@ -6,7 +6,7 @@ import {
   decodePlayer, idealZoom, judge, marketKeys, payoutOf, playerPda, rangeAt, sigmaFor, windowRange,
   type Book, type Candles, type Market, type MarketKeys, type Player, type Symbol, type TapSlot,
 } from "@quickdraw/sdk";
-import { KEEPER_URL, base, er } from "./chain";
+import { base, er } from "./chain";
 
 export interface PricePoint { t: number; p: number }
 /** The on-chain price evidence for one settled tap: per-second high/low the keeper recorded in its window. */
@@ -14,7 +14,7 @@ export interface Evidence { low: bigint | null; high: bigint | null; bars: { sec
 export interface Result { tap: TapSlot; outcome: "win" | "lose" | "void"; at: number; payout: bigint; evidence: Evidence | null }
 export interface Pending { key: string; lo: bigint; hi: bigint; column: number; stake: bigint; multBps: number; at: number }
 export interface FeedItem { id: string; who: string; me: boolean; text: string; tone: "win" | "loss" | "" }
-export interface Leader { owner: string; pnl: bigint; wins: number; taps: number; me: boolean; demo: boolean }
+export interface Leader { owner: string; pnl: bigint; wins: number; taps: number; me: boolean }
 
 /** Captures the candle ring's record of a tap's window at the moment it settles (the ring wraps after 256s). */
 function evidenceFor(c: Candles, t: TapSlot): Evidence {
@@ -111,12 +111,9 @@ export class LiveModel {
     void this.fast();
   }
 
-  /** House-run demo wallets (from the keeper), labelled so nobody mistakes them for players. */
-  demo = new Set<string>();
-  name(owner: PublicKey) { return `${this.demo.has(owner.toBase58()) ? "demo·" : ""}${short(owner)}`; }
+  name(owner: PublicKey) { return short(owner); }
 
   start() {
-    void fetch(`${KEEPER_URL}/bots`).then((r) => r.json() as Promise<string[]>).then((list) => { this.demo = new Set(list); }).catch(() => {});
     // React dev mode mounts twice (start, stop, start): reset rather than stay stopped
     this.stopped = false;
     this.timers.forEach(clearInterval);
@@ -283,7 +280,7 @@ export class LiveModel {
         .map((p) => ({ owner: p.owner, taps: p.taps.filter((t) => t.open && t.market.equals(this.keys.market)) }));
       this.leaders = players
         .filter((p) => p.tapsPlaced > 0)
-        .map((p) => ({ owner: p.owner.toBase58(), pnl: p.pnl, wins: p.wins, taps: p.tapsPlaced, me: p.owner.toBase58() === me, demo: this.demo.has(p.owner.toBase58()) }))
+        .map((p) => ({ owner: p.owner.toBase58(), pnl: p.pnl, wins: p.wins, taps: p.tapsPlaced, me: p.owner.toBase58() === me }))
         .sort((a, b) => (b.pnl > a.pnl ? 1 : b.pnl < a.pnl ? -1 : 0))
         .slice(0, 8);
       this.online = players.filter((p) => p.taps.some((t) => t.open)).length;
