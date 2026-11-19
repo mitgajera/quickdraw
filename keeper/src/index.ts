@@ -5,8 +5,8 @@ import http from "node:http";
 import { createRemoteJWKSet, jwtVerify } from "jose";
 import { ComputeBudgetProgram, Connection, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction, type Keypair } from "@solana/web3.js";
 import {
-  PLAYER_SIZE, PROGRAM_ID, SETTLE_TIMEOUT_SECS, WALLET_TAP_FLAG, actionEscrowPda, ataOf, createAtaIdempotent, decodeCandles, decodePlayer, explainError, ix, judge,
-  marketKeys, parseEvents, playerPda, sendWithKeypairs, transferTokens, type Candles, type MarketKeys,
+  PLAYER_SIZE, PROGRAM_ID, WALLET_TAP_FLAG, actionEscrowPda, ataOf, createAtaIdempotent, decodeCandles, decodePlayer, explainError, ix,
+  marketKeys, parseEvents, playerPda, sendWithKeypairs, transferTokens, type MarketKeys,
 } from "@quickdraw/sdk";
 import { botKeypairs, config, keeperKeypair } from "./config";
 import { startCrowd } from "./crowd";
@@ -68,36 +68,59 @@ function tickLoop(m: MarketKeys) {
 // ---------- settlement ----------
 const inflight = new Set<string>();
 
+// Bandwidth matters (free hosts meter it): instead of downloading every player and every candle ring
+// each scan, ask only for players with an open tap. A player account is an 8-byte discriminator, a
+// 112-byte header and 12 tap slots of 81 bytes whose last byte is the `open` flag, so one memcmp per
+// slot finds them. All 12 queries go in a single JSON-RPC batch; with nothing open the reply is tiny.
+const TAP_SLOTS = 12, TAP_OPEN_OFFSET = (slot: number) => 8 + 112 + 81 * slot + 80;
+
+async function openPlayers(): Promise<Buffer[]> {
+  const body = Array.from({ length: TAP_SLOTS }, (_, slot) => ({
+    jsonrpc: "2.0", id: slot, method: "getProgramAccounts",
+    params: [PROGRAM_ID.toBase58(), {
+      encoding: "base64", commitment: "confirmed",
+      filters: [{ dataSize: PLAYER_SIZE }, { memcmp: { offset: TAP_OPEN_OFFSET(slot), bytes: "2" } }], // "2" = byte 1
+    }],
+  }));
+  const res = await fetch(config.erRpc, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  const replies = (await res.json()) as { result?: { pubkey: string; account: { data: [string, string] } }[]; error?: { message: string } }[];
+  const seen = new Map<string, Buffer>();
+  for (const r of replies) {
+    if (r.error) throw new Error(r.error.message);
+    for (const a of r.result ?? []) if (!seen.has(a.pubkey)) seen.set(a.pubkey, Buffer.from(a.account.data[0], "base64"));
+  }
+  return [...seen.values()];
+}
+
+/**
+ * Settles every open tap whose window has closed. The program judges each tap from the candle ring
+ * itself, so the keeper no longer needs to download the rings: it just calls settle once a window is
+ * over (players' own browsers still settle their wins the moment the price touches).
+ */
 async function settleOnce() {
-  const [accounts, candleInfos] = await Promise.all([
-    er.getProgramAccounts(PROGRAM_ID, { filters: [{ dataSize: PLAYER_SIZE }] }),
-    er.getMultipleAccountsInfo(markets.map((m) => m.candles)),
-  ]);
-  const candles = new Map<string, Candles>();
-  markets.forEach((m, i) => { const info = candleInfos[i]; if (info) candles.set(m.market.toBase58(), decodeCandles(info.data)); });
+  const players = await openPlayers();
   const now = Math.floor(Date.now() / 1000);
   let open = 0;
-  for (const { account } of accounts) {
-    const p = decodePlayer(account.data);
+  for (const data of players) {
+    const p = decodePlayer(data);
     for (const m of markets) {
-      const c = candles.get(m.market.toBase58());
       const taps = p.taps.filter((t) => t.open && t.market.equals(m.market));
       open += taps.length;
-      if (!c || taps.length === 0) continue;
-      const decided = (t: (typeof taps)[number]) => {
-        const dataNow = now >= t.end + SETTLE_TIMEOUT_SECS ? Math.max(c.lastPublishTime, t.end) : c.lastPublishTime;
-        return judge(c, t.lo, t.hi, t.start, t.end, dataNow) !== "pending";
-      };
       // wallet taps (paid from the wallet) and balance taps settle through different instructions
       for (const wallet of [false, true]) {
-        if (!taps.some((t) => ((t.id & WALLET_TAP_FLAG) !== 0) === wallet && decided(t))) continue;
+        if (!taps.some((t) => ((t.id & WALLET_TAP_FLAG) !== 0) === wallet && now >= t.end + 1)) continue;
         const key = `${p.owner.toBase58()}:${m.symbol}:${wallet ? "w" : "b"}`;
         if (!inflight.has(key) && (backoff.get(key) ?? 0) < Date.now()) void settle(p.owner, m, key, wallet);
       }
     }
   }
-  stats.players = accounts.length;
   stats.openTaps = open;
+}
+
+/** Player count for /health, from a cheap keys-only scan every few minutes. */
+async function countPlayers() {
+  const keys = await er.getProgramAccounts(PROGRAM_ID, { filters: [{ dataSize: PLAYER_SIZE }], dataSlice: { offset: 0, length: 0 } });
+  stats.players = keys.length;
 }
 
 /** Wallet wins wait for their stake to be collected on Solana: retry those gently. */
@@ -119,9 +142,10 @@ async function settle(owner: PublicKey, m: MarketKeys, key: string, wallet: bool
     }
   } catch (e) {
     const msg = explainError(e);
-    if (wallet && /settled yet/i.test(msg)) {
-      backoff.set(key, Date.now() + 1500); // stake still on its way from the wallet
-    } else {
+    // retry later either way; "not settled yet" (stake still on its way, or the price record has not
+    // reached the window's end) is expected and not an error
+    backoff.set(key, Date.now() + 3000);
+    if (!/settled yet|nothing to settle|pending/i.test(msg)) {
       stats.settleErrors++;
       log("settle error", m.symbol, owner.toBase58().slice(0, 6), msg);
     }
@@ -269,6 +293,8 @@ for (const m of markets) {
   tickLoop(m);
 }
 settleLoop();
+void countPlayers().catch(() => {});
+setInterval(() => void countPlayers().catch(() => {}), 5 * 60_000);
 serve();
 void fundEscrow().catch((e) => log("escrow top-up failed", explainError(e)));
 setInterval(() => void fundEscrow().catch((e) => log("escrow top-up failed", explainError(e))), 5 * 60_000);

@@ -14,8 +14,10 @@ export const config = {
   /** The house: owns the book and markets and provides the USDC bankroll (bootstrap only). */
   houseKeypairPath: env("HOUSE_KEYPAIR", env("KEEPER_KEYPAIR", path.join(os.homedir(), ".config", "solana", "id.json"))),
   markets: env("MARKETS", "SOL").split(",").map((s) => s.trim().toUpperCase()) as Symbol[],
-  tickMs: Number(env("TICK_MS", "125")),
-  settleMs: Number(env("SETTLE_MS", "400")),
+  // 4 ticks a second per market: enough for per-second high/low candles, half the traffic of 8
+  tickMs: Number(env("TICK_MS", "250")),
+  // settlement scan; live players settle their own wins instantly, so this is the backstop
+  settleMs: Number(env("SETTLE_MS", "2000")),
   port: Number(env("PORT", "8787")),
   /** Devnet SOL sent to a new player wallet that has none, for base-layer fees and rent. */
   sponsorLamports: Number(env("SPONSOR_LAMPORTS", String(30_000_000))),
