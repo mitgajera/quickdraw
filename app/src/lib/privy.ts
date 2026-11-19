@@ -9,7 +9,15 @@ import { PublicKey, Transaction } from "@solana/web3.js";
 import { explainError } from "@quickdraw/sdk";
 import type { AppSigner } from "./chain";
 
-export const PRIVY_APP_ID = process.env.NEXT_PUBLIC_PRIVY_APP_ID ?? "cmw7jsye300eu0hjq0s6f7jns";
+const DEFAULT_PRIVY_APP_ID = "cmw7jsye300eu0hjq0s6f7jns";
+/**
+ * The Privy app ID (public, not a secret). An empty or mistyped value in the host's settings would
+ * otherwise fail the whole build, so anything that does not look like a Privy ID falls back.
+ */
+export const PRIVY_APP_ID = (() => {
+  const v = process.env.NEXT_PUBLIC_PRIVY_APP_ID?.trim();
+  return v && /^[a-z0-9]{20,32}$/.test(v) ? v : DEFAULT_PRIVY_APP_ID;
+})();
 
 /** How long to wait for Privy's own create-on-login before creating the wallet ourselves. */
 const CREATE_GRACE_MS = 2500;
