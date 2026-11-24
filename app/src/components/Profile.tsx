@@ -4,7 +4,7 @@
 // on-chain receipt: stakes the house collected and payouts it sent, straight from Solana devnet.
 import { useCallback, useEffect, useState } from "react";
 import { LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
-import { BASE_RPC, USDC_MINT, ataOf, decodePlayer, explainError, playerPda } from "@quickdraw/sdk";
+import { BASE_RPC, GOLDEN_MINT, USDC_MINT, ataOf, decodePlayer, explainError, playerPda } from "@quickdraw/sdk";
 import { LogoMark } from "./Logo";
 import { decodeTokenAccount, useAccount, VAULT_HEX } from "@/lib/account";
 import { base, er, prefs } from "@/lib/chain";
@@ -166,6 +166,19 @@ export function Profile() {
         </div>
 
         <div className="pcol last">
+          <section className="card pad golden-card">
+            <div className="h3row">
+              <h3 className="h3">Golden Taps</h3>
+              <a className="linkbtn" href={`https://explorer.solana.com/address/${GOLDEN_MINT.toBase58()}?cluster=devnet`} target="_blank" rel="noreferrer">Collectible ↗</a>
+            </div>
+            <div className="golden-row">
+              <span className="golden-coin" aria-hidden="true">★</span>
+              <b className="golden-n">{account.goldenTaps}</b>
+              <span className="muted small">
+                Win 2x or more in the golden column (picked each minute by MagicBlock VRF) and a Golden Tap lands in your wallet. Yours to keep.
+              </span>
+            </div>
+          </section>
           <section className="card pad">
             <h3 className="h3">Achievements</h3>
             <div className="badges">

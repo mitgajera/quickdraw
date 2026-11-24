@@ -3,7 +3,7 @@
   --bg: #0A0A0C; --panel: #121215; --board: #121215; --soft: #18181C; --raise: #1D1D22;
   --ink: #F2F2F4; --mute: #8B8B94; --faint: #5C5C66; --line: #222228;
   --accent: #F2F2F4; --accent-ink: #0A0A0C; --price: #F2F2F4;
-  --win: #3DD68C; --loss: #F2555A;
+  --win: #3DD68C; --loss: #F2555A; --gold: #F5C542;
   --radius: 10px; --card-radius: 18px;
   --shadow: 0 1px 0 rgba(255,255,255,.03) inset, 0 20px 50px rgba(0,0,0,.35);
   color-scheme: dark;
@@ -12,7 +12,7 @@
   --bg: #F5F5F2; --panel: #FFFFFF; --board: #FFFFFF; --soft: #F1F1EE; --raise: #ECECE8;
   --ink: #121214; --mute: #7E7E86; --faint: #A6A6AD; --line: #E6E6E1;
   --accent: #121214; --accent-ink: #FFFFFF; --price: #121214;
-  --win: #0E9F62; --loss: #E0464C;
+  --win: #0E9F62; --loss: #E0464C; --gold: #B7800F;
   --shadow: 0 1px 2px rgba(0,0,0,.04), 0 12px 32px rgba(0,0,0,.05);
   color-scheme: light;
 }
@@ -352,3 +352,14 @@ kbd { font-family: var(--font-mono), monospace; font-size: 11px; padding: 1px 6p
   .pcol.last { overflow: hidden; }
   .pcol.last .receipts { flex: 1; min-height: 0; }
 }
+
+/* golden-column win (MagicBlock VRF): the banner turns gold */
+.winbanner.golden { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold), 0 0 32px color-mix(in srgb, var(--gold) 35%, transparent); }
+.winbanner.golden .lbl, .winbanner.golden b { color: var(--gold); }
+.winbanner.golden .dotw { background: var(--gold); }
+/* Golden Taps collectible card (profile) */
+.golden-card { border-color: color-mix(in srgb, var(--gold) 45%, var(--line)); }
+.golden-row { display: grid; grid-template-columns: auto auto 1fr; align-items: center; gap: 12px; margin-top: 8px; }
+.golden-coin { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-size: 20px;
+  color: var(--bg); background: radial-gradient(circle at 35% 30%, #FFE9A3, var(--gold) 60%, #9A6B0A); box-shadow: 0 0 18px color-mix(in srgb, var(--gold) 40%, transparent); }
+.golden-n { font-family: var(--font-mono, ui-monospace), monospace; font-size: 26px; color: var(--gold); }

@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Buffer } from "buffer";
 import { LAMPORTS_PER_SOL, type PublicKey, type TransactionInstruction } from "@solana/web3.js";
 import {
-  DELEGATION_PROGRAM_ID, PROGRAM_ID, WALLET_ALLOWANCE, ataOf, buildTx, createAtaIdempotent, decodeLedger, decodePlayer,
+  DELEGATION_PROGRAM_ID, GOLDEN_MINT, PROGRAM_ID, WALLET_ALLOWANCE, ataOf, buildTx, createAtaIdempotent, decodeLedger, decodePlayer,
   explainError, ix, ledgerPda, playerPda, sendSigned, transferTokens, vaultPda,
 } from "@quickdraw/sdk";
 import { KEEPER_URL, base, er, sessionKey, type AppSigner } from "./chain";
@@ -41,6 +41,8 @@ export function useAccount(signer: AppSigner | null) {
   const [collected, setCollected] = useState<Set<number>>(new Set());
   /** Balance left in the old deposit-based game account, if any (can be withdrawn). */
   const [legacyBalance, setLegacyBalance] = useState<bigint>(0n);
+  /** Golden Tap collectibles in the wallet; null until the wallet has a Golden Tap account. */
+  const [goldenTaps, setGoldenTaps] = useState<number | null | undefined>(undefined);
   const signerRef = useRef(signer);
   signerRef.current = signer;
 
@@ -48,13 +50,14 @@ export function useAccount(signer: AppSigner | null) {
   const readWallet = useCallback(async (withPlayer = false) => {
     const s = signerRef.current;
     if (!s) return null;
-    const keys = [ataOf(s.publicKey), ledgerPda(s.publicKey), ...(withPlayer ? [playerPda(s.publicKey)] : [])];
-    const [ata, ledger, player] = await base.getMultipleAccountsInfo(keys);
+    const keys = [ataOf(s.publicKey), ledgerPda(s.publicKey), ataOf(s.publicKey, GOLDEN_MINT), ...(withPlayer ? [playerPda(s.publicKey)] : [])];
+    const [ata, ledger, golden, player] = await base.getMultipleAccountsInfo(keys);
     const tokens = ata ? decodeTokenAccount(ata.data) : { amount: 0n, delegate: null, delegated: 0n };
     const led = ledger ? decodeLedger(ledger.data) : null;
     if (signerRef.current === s) {
       setWalletUsdc(tokens.amount);
       if (led) setCollected(new Set(led.collected.filter((id) => id !== 0)));
+      setGoldenTaps(golden ? Number(decodeTokenAccount(golden.data).amount) : null);
     }
     return { tokens, ledger: led, player: player ?? null };
   }, []);
@@ -173,6 +176,8 @@ export function useAccount(signer: AppSigner | null) {
       const session = sessionKey(owner, true)!;
       const ixs: TransactionInstruction[] = [];
       if (!ata) ixs.push(createAtaIdempotent(owner, owner));
+      // where Golden Tap collectibles land (golden-column wins); idempotent, so always safe to include
+      ixs.push(createAtaIdempotent(owner, owner, GOLDEN_MINT));
       if (!info) ixs.push(ix.initPlayer(owner));
       if (!ledger) ixs.push(ix.initLedger(owner));
       if (!tokens || tokens.delegate !== VAULT_HEX || tokens.delegated < ALLOWANCE_FLOOR) ixs.push(ix.approveVault(owner, WALLET_ALLOWANCE));
@@ -227,8 +232,24 @@ export function useAccount(signer: AppSigner | null) {
     await send(base, [ix.revokeVault(signerRef.current!.publicKey)]);
   }), [run]);
 
+  // players who set up before Golden Taps existed: open their Golden Tap account once, quietly
+  const openingGolden = useRef(false);
+  useEffect(() => {
+    if (stage !== "ready" || goldenTaps !== null || openingGolden.current || !signerRef.current) return;
+    openingGolden.current = true;
+    const owner = signerRef.current.publicKey;
+    void (async () => {
+      try {
+        await ensureFunded(false);
+        await send(base, [createAtaIdempotent(owner, owner, GOLDEN_MINT)]);
+        await readWallet();
+      } catch { openingGolden.current = false; /* try again on a later wallet read */ }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stage, goldenTaps, readWallet]);
+
   return {
-    stage, busy, error, walletUsdc, collected, legacyBalance, activate, withdrawLegacy, recheck: check, refreshWallet: readWallet,
-    sendUsdc, pauseWalletPlay,
+    stage, busy, error, walletUsdc, collected, legacyBalance, goldenTaps: goldenTaps ?? 0, activate, withdrawLegacy,
+    recheck: check, refreshWallet: readWallet, sendUsdc, pauseWalletPlay,
   };
 }

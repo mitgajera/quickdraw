@@ -2,9 +2,9 @@
 // taps. The canvas reads the mutable model every frame; React re-renders from `version` bumps.
 import type { PublicKey } from "@solana/web3.js";
 import {
-  CANDLE_SLOTS, PLAYER_SIZE, PROGRAM_ID, bookPda, decodeBook, decodeCandles, decodeMarket, decodeOracle,
-  decodePlayer, idealZoom, judge, marketKeys, payoutOf, playerPda, rangeAt, sigmaFor, windowRange,
-  type Book, type Candles, type Market, type MarketKeys, type Player, type Symbol, type TapSlot,
+  CANDLE_SLOTS, PLAYER_SIZE, PROGRAM_ID, bookPda, decodeBook, decodeCandles, decodeLucky, decodeMarket, decodeOracle,
+  decodePlayer, idealZoom, judge, luckyPda, marketKeys, payoutOf, playerPda, rangeAt, sigmaFor, windowRange,
+  type Book, type Candles, type Lucky, type Market, type MarketKeys, type Player, type Symbol, type TapSlot,
 } from "@quickdraw/sdk";
 import { base, er } from "./chain";
 
@@ -67,6 +67,8 @@ export class LiveModel {
   market: Market | null = null;
   book: Book | null = null;
   candles: Candles | null = null;
+  /** The golden-column draw (MagicBlock VRF seeds per round). */
+  lucky: Lucky | null = null;
   price: bigint | null = null;
   publishTime = 0;
   hist: PricePoint[] = [];
@@ -224,7 +226,8 @@ export class LiveModel {
     try {
       // re-read the market every second too: its grid can be retuned on-chain at any time, and a
       // stale row height would quote boxes the program then rejects
-      const [candles, book, market] = await er.getMultipleAccountsInfo([this.keys.candles, bookPda(), this.keys.market]);
+      const [candles, book, market, lucky] = await er.getMultipleAccountsInfo([this.keys.candles, bookPda(), this.keys.market, luckyPda()]);
+      if (lucky) this.lucky = decodeLucky(lucky.data);
       if (candles) {
         this.candles = decodeCandles(candles.data);
         if (this.hist.length < 3) this.backfill(this.candles);

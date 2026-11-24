@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { ComputeBudgetProgram, Transaction } from "@solana/web3.js";
-import { ER_RPC, PROGRAM_ID, explainError, ix, playerPda, rowHeight, sendSigned, type Symbol } from "@quickdraw/sdk";
+import { ER_RPC, GOLDEN_MIN_MULT_BPS, GOLDEN_TAP_FLAG, PROGRAM_ID, explainError, ix, playerPda, rowHeight, sendSigned, type Symbol } from "@quickdraw/sdk";
 import type { PublicKey } from "@solana/web3.js";
 import { Board } from "./Board";
 import { LogoMark } from "./Logo";
@@ -57,13 +57,14 @@ export function Game() {
     setToast({ text, bad }); clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 3200);
   }, []);
-  const [banner, setBanner] = useState<{ amount: string; mult: string; big: boolean; key: number } | null>(null);
+  const [banner, setBanner] = useState<{ amount: string; mult: string; big: boolean; golden: boolean; key: number } | null>(null);
   useEffect(() => model.onResult((r: Result) => {
     if (r.outcome === "win") {
       sound.win();
-      const big = r.tap.multBps >= 100_000;
+      const golden = (r.tap.id & GOLDEN_TAP_FLAG) !== 0 && r.tap.multBps >= GOLDEN_MIN_MULT_BPS;
+      const big = golden || r.tap.multBps >= 100_000;
       if (big && navigator.vibrate) navigator.vibrate([40, 60, 40, 60, 120]);
-      setBanner({ amount: usd(r.payout), mult: `${(r.tap.multBps / 1e4).toFixed(1)}x`, big, key: Date.now() });
+      setBanner({ amount: usd(r.payout), mult: `${(r.tap.multBps / 1e4).toFixed(1)}x`, big, golden, key: Date.now() });
       setTimeout(() => setBanner((b) => (b && Date.now() - b.key >= 2000 ? null : b)), big ? 3200 : 2200);
     } else if (r.outcome === "lose") {
       sound.lose();
@@ -322,8 +323,8 @@ export function Game() {
               <div className="notice" role="status">The game server is catching up with prices — tapping resumes in a few seconds.</div>
             )}
             {banner && (
-              <div className={`winbanner${banner.big ? " big" : ""}`} key={banner.key} role="status">
-                <span className="dotw" /><span className="lbl">Hit at {banner.mult}</span><b>+{banner.amount}</b>
+              <div className={`winbanner${banner.big ? " big" : ""}${banner.golden ? " golden" : ""}`} key={banner.key} role="status">
+                <span className="dotw" /><span className="lbl">{banner.golden ? `★ Golden Tap · ${banner.mult}` : `Hit at ${banner.mult}`}</span><b>+{banner.amount}</b>
               </div>
             )}
           </div>

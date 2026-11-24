@@ -1,15 +1,15 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { boxAt, quoteBox, rowHeight, sigmaFor } from "@quickdraw/sdk";
+import { GOLDEN_MIN_MULT_BPS, boxAt, isGoldenColumn, quoteBox, rowHeight, sigmaFor } from "@quickdraw/sdk";
 import type { LiveModel, Result } from "@/lib/live";
 
-interface Tokens { bg: string; board: string; ink: string; mute: string; accent: string; price: string; win: string; loss: string }
+interface Tokens { bg: string; board: string; ink: string; mute: string; accent: string; price: string; win: string; loss: string; gold: string }
 
 const readTokens = (): Tokens => {
   const s = getComputedStyle(document.documentElement);
   const v = (n: string) => s.getPropertyValue(`--${n}`).trim() || "#888888";
-  return { bg: v("bg"), board: v("board"), ink: v("ink"), mute: v("mute"), accent: v("accent"), price: v("price"), win: v("win"), loss: v("loss") };
+  return { bg: v("bg"), board: v("board"), ink: v("ink"), mute: v("mute"), accent: v("accent"), price: v("price"), win: v("win"), loss: v("loss"), gold: v("gold") };
 };
 const hexRgb = (h: string) => { const x = h.replace("#", ""); return [0, 2, 4].map((i) => parseInt(x.slice(i, i + 2), 16)); };
 const rgba = (h: string, a: number) => { const [r, g, b] = hexRgb(h); return `rgba(${r},${g},${b},${a})`; };
@@ -178,9 +178,16 @@ export function Board({ model, stake, canTap, onTap, onReject, onBlocked }: Prop
       ctx.font = `500 ${fs}px ${monoFont}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
       const stakeUnits = BigInt(Math.round(props.current.stake * 1e6));
       const taken = takenColumns();
+      const golden = (k: number) => !!model.lucky && isGoldenColumn(model.lucky, model.keys.market, col, k * col);
       for (let k = kNow; k <= kMax; k++) {
         const x0 = Math.max(xOf(k * col), nowX), x1 = xOf((k + 1) * col);
         if (x1 <= nowX) continue;
+        const isGolden = golden(k);
+        if (isGolden) {
+          // this round's golden column (MagicBlock VRF): a warm wash and gold edges
+          ctx.fillStyle = rgba(T.gold, reduced ? 0.08 : 0.07 + 0.03 * Math.sin(nowMs / 400)); ctx.fillRect(x0, 0, x1 - x0, H);
+          ctx.fillStyle = rgba(T.gold, 0.55); ctx.fillRect(x0, 0, 1.5, H); ctx.fillRect(x1 - 1.5, 0, 1.5, H);
+        }
         for (let j = jMin; j <= jMax; j++) {
           const y0 = yOf((j + 1) * band), y1 = yOf(j * band), w = x1 - x0, h = y1 - y0;
           const box = boxAt(market, BigInt(j), k, model.zoom);
@@ -220,6 +227,8 @@ export function Board({ model, stake, canTap, onTap, onReject, onBlocked }: Prop
           if (!labelled) continue;
           // likely boxes and long shots read bright; the middle of the grid stays quiet
           ctx.fillStyle = mix(T.mute, T.ink, clamp(Math.max(1 - t / 0.25, (t - 0.45) / 0.55), 0, 1));
+          // in the golden column, boxes that can win a Golden Tap (2x and up) read gold
+          if (isGolden && q.multBps >= GOLDEN_MIN_MULT_BPS) ctx.fillStyle = T.gold;
           ctx.fillText(fmtMult(q.multBps), x0 + w / 2, y0 + h / 2 + 0.5);
         }
       }
@@ -341,8 +350,9 @@ export function Board({ model, stake, canTap, onTap, onReject, onBlocked }: Prop
         const x0 = Math.max(xOf(k * col), nowX), x1 = Math.min(xOf((k + 1) * col), AX);
         if (x1 - x0 < 30) continue;
         const lead = k * col - rt;
-        ctx.fillStyle = lead <= 0 ? T.win : T.mute;
-        ctx.fillText(lead <= 0 ? "LIVE" : `${Math.ceil(lead)}s`, (x0 + x1) / 2, 7);
+        const g = golden(k);
+        ctx.fillStyle = lead <= 0 ? T.win : g ? T.gold : T.mute;
+        ctx.fillText(lead <= 0 ? (g ? "★ LIVE" : "LIVE") : g ? `★ ${Math.ceil(lead)}s` : `${Math.ceil(lead)}s`, (x0 + x1) / 2, 7);
       }
 
       // effects
