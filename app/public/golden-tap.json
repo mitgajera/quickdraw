@@ -1,0 +1,16 @@
+{
+  "name": "Golden Tap",
+  "symbol": "GTAP",
+  "description": "Won in Quickdraw's golden column: a win of 2x or more in the one column per round that MagicBlock VRF drew at random. Minted on-chain by a MagicBlock Magic Action the moment the win settled. Provably fair, yours to keep.",
+  "image": "https://quickdraw-beta.vercel.app/golden-tap.png",
+  "external_url": "https://quickdraw-beta.vercel.app",
+  "attributes": [
+    { "trait_type": "Game", "value": "Quickdraw" },
+    { "trait_type": "Randomness", "value": "MagicBlock VRF" },
+    { "trait_type": "Minimum win", "value": "2x" }
+  ],
+  "properties": {
+    "category": "image",
+    "files": [{ "uri": "https://quickdraw-beta.vercel.app/golden-tap.png", "type": "image/png" }]
+  }
+}

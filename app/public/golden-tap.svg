@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="45%" r="70%">
+      <stop offset="0" stop-color="#1B1B20"/>
+      <stop offset="1" stop-color="#0A0A0C"/>
+    </radialGradient>
+    <radialGradient id="coin" cx="38%" cy="32%" r="75%">
+      <stop offset="0" stop-color="#FFF1BF"/>
+      <stop offset="0.35" stop-color="#F5C542"/>
+      <stop offset="0.8" stop-color="#C8901A"/>
+      <stop offset="1" stop-color="#8A5C08"/>
+    </radialGradient>
+    <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FFE9A3"/>
+      <stop offset="0.5" stop-color="#B7800F"/>
+      <stop offset="1" stop-color="#FFE08A"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0.55" stop-color="#F5C542" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#F5C542" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="238" fill="url(#glow)"/>
+  <!-- coin -->
+  <circle cx="256" cy="256" r="182" fill="url(#rim)"/>
+  <circle cx="256" cy="256" r="166" fill="url(#coin)"/>
+  <circle cx="256" cy="256" r="150" fill="none" stroke="#8A5C08" stroke-opacity="0.45" stroke-width="3"/>
+  <!-- star -->
+  <path d="M256 128 L284.2 205.6 L366.6 208 L301.4 258.4 L324.6 337.6 L256 291.2 L187.4 337.6 L210.6 258.4 L145.4 208 L227.8 205.6 Z"
+        fill="#FFF8DC" stroke="#8A5C08" stroke-width="5" stroke-linejoin="round"/>
+  <!-- the Quickdraw pulse and arrow, small, under the star -->
+  <g transform="translate(196 340) scale(3.75)" fill="none" stroke="#5C3D05" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M1 12 H4 L6.2 7 L8.8 15 L16.5 4.5"/>
+    <path d="M11.5 4 H16.8 V9.2"/>
+  </g>
+  <!-- shine -->
+  <path d="M150 170 A120 120 0 0 1 250 108" fill="none" stroke="#FFFFFF" stroke-opacity="0.55" stroke-width="10" stroke-linecap="round"/>
+</svg>
