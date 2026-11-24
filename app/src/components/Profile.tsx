@@ -175,7 +175,7 @@ export function Profile() {
               <span className="golden-coin" aria-hidden="true">★</span>
               <b className="golden-n">{account.goldenTaps}</b>
               <span className="muted small">
-                Win 2x or more in the golden column (picked each minute by MagicBlock VRF) and a Golden Tap lands in your wallet. Yours to keep.
+                Win 2x or more in the golden column (a new one about every 30 seconds, picked by MagicBlock VRF) and a Golden Tap lands in your wallet. Yours to keep.
               </span>
             </div>
           </section>
