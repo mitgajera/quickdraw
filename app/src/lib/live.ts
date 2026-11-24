@@ -168,9 +168,11 @@ export class LiveModel {
     if (price === this.price && publishTime === this.publishTime) return;
     this.price = price;
     this.publishTime = publishTime;
-    // never step back in time (the clock offset is a rolling minimum and can grow)
+    // points are kept in this device's clock; the chart subtracts the clock offset when drawing. (Storing
+    // them pre-shifted broke when the offset, a rolling minimum, later grew: recent points then sat in
+    // the future and the line ran past "now".)
     const prevT = this.hist.at(-1)?.t ?? -Infinity;
-    this.hist.push({ t: Math.max(now - this.clockOffset, prevT + 0.001), p: Number(price) / 1e8 });
+    this.hist.push({ t: Math.max(now, prevT + 0.001), p: Number(price) / 1e8 });
     while (this.hist.length > 2 && this.hist[0]!.t < now - 120) this.hist.shift();
   }
 
@@ -264,7 +266,7 @@ export class LiveModel {
     for (let sec = last - 90; sec <= last; sec++) {
       const i = ((sec % CANDLE_SLOTS) + CANDLE_SLOTS) % CANDLE_SLOTS;
       if (c.secs[i] !== BigInt(sec)) continue;
-      const t = sec + 0.5 + shift;
+      const t = sec + 0.5 + shift + this.clockOffset; // ER seconds -> this device's clock
       if (t >= firstLive) break;
       pts.push({ t, p: (Number(c.lows[i]!) + Number(c.highs[i]!)) / 2e8 });
     }

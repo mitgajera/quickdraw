@@ -31,12 +31,14 @@ interface Props {
   onBlocked?: () => void;
   /** Tapped a box the house does not offer right now. */
   onReject?: (reason: "locked" | "too-far" | "unpriced" | "range" | "limit" | "column", side: "near" | "far") => void;
+  /** A short note for the player, e.g. that a box cannot win a Golden Tap. */
+  onHint?: (text: string) => void;
 }
 
-export function Board({ model, stake, canTap, onTap, onReject, onBlocked }: Props) {
+export function Board({ model, stake, canTap, onTap, onReject, onBlocked, onHint }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
-  const props = useRef({ stake, canTap, onTap, onReject, onBlocked });
-  props.current = { stake, canTap, onTap, onReject, onBlocked };
+  const props = useRef({ stake, canTap, onTap, onReject, onBlocked, onHint });
+  props.current = { stake, canTap, onTap, onReject, onBlocked, onHint };
 
   useEffect(() => {
     const cvs = canvas.current!;
@@ -112,6 +114,7 @@ export function Board({ model, stake, canTap, onTap, onReject, onBlocked }: Prop
         return;
       }
       ripples.push({ k: c.k, j: c.j, age: 0 });
+      if (goldenAt(c.k) && q.multBps < GOLDEN_MIN_MULT_BPS) props.current.onHint?.("Only ★ boxes (2x and up) win a Golden Tap");
       props.current.onTap(BigInt(c.j), c.k, model.zoom, q.multBps);
     };
     cvs.addEventListener("pointermove", onMove);
@@ -133,6 +136,11 @@ export function Board({ model, stake, canTap, onTap, onReject, onBlocked }: Prop
     let monoFont = mono();
     const fontTimer = setInterval(() => { monoFont = mono(); }, 2000);
 
+    /** Whether column k is this round's golden column for the market on screen (MagicBlock VRF). */
+    const goldenAt = (k: number) => {
+      const col = model.market?.colSecs;
+      return !!model.lucky && !!col && isGoldenColumn(model.lucky, model.keys.market, col, k * col);
+    };
     let last = performance.now(), raf = 0;
     const frame = (nowMs: number) => {
       const dt = Math.min(0.1, (nowMs - last) / 1000); last = nowMs;
@@ -178,7 +186,7 @@ export function Board({ model, stake, canTap, onTap, onReject, onBlocked }: Prop
       ctx.font = `500 ${fs}px ${monoFont}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
       const stakeUnits = BigInt(Math.round(props.current.stake * 1e6));
       const taken = takenColumns();
-      const golden = (k: number) => !!model.lucky && isGoldenColumn(model.lucky, model.keys.market, col, k * col);
+      const golden = goldenAt;
       for (let k = kNow; k <= kMax; k++) {
         const x0 = Math.max(xOf(k * col), nowX), x1 = xOf((k + 1) * col);
         if (x1 <= nowX) continue;
@@ -227,9 +235,13 @@ export function Board({ model, stake, canTap, onTap, onReject, onBlocked }: Prop
           if (!labelled) continue;
           // likely boxes and long shots read bright; the middle of the grid stays quiet
           ctx.fillStyle = mix(T.mute, T.ink, clamp(Math.max(1 - t / 0.25, (t - 0.45) / 0.55), 0, 1));
-          // in the golden column, boxes that can win a Golden Tap (2x and up) read gold
-          if (isGolden && q.multBps >= GOLDEN_MIN_MULT_BPS) ctx.fillStyle = T.gold;
-          ctx.fillText(fmtMult(q.multBps), x0 + w / 2, y0 + h / 2 + 0.5);
+          // in the golden column, only boxes that can win a Golden Tap (2x and up) are gold, with a star
+          const eligible = isGolden && q.multBps >= GOLDEN_MIN_MULT_BPS;
+          if (eligible) {
+            ctx.fillStyle = rgba(T.gold, 0.1); ctx.fillRect(x0 + 1, y0 + 1, w - 1, h - 1);
+            ctx.fillStyle = T.gold;
+          }
+          ctx.fillText(eligible ? `★ ${fmtMult(q.multBps)}` : fmtMult(q.multBps), x0 + w / 2, y0 + h / 2 + 0.5);
         }
       }
       ctx.restore();
@@ -294,7 +306,9 @@ export function Board({ model, stake, canTap, onTap, onReject, onBlocked }: Prop
 
       // price line: oracle updates arrive as steps, so filter them in time (EMA, tau 0.35s) and
       // draw a Catmull-Rom curve through the result, ending at the eased head
-      const pts = hist.filter((h) => xOf(h.t) > -40);
+      // history is in this device's clock: shift it into the ER clock the grid uses, never past "now"
+      const off = model.clockOffset;
+      const pts = hist.map((h) => ({ t: Math.min(h.t - off, rt), p: h.p })).filter((h) => xOf(h.t) > -40);
       if (pts.length > 1) {
         const path: [number, number][] = [];
         let s = pts[0]!.p, prevT = pts[0]!.t;
@@ -383,12 +397,14 @@ export function Board({ model, stake, canTap, onTap, onReject, onBlocked }: Prop
         if (q?.ok) {
           const s = props.current.stake;
           const chance = model.book ? Math.round(((1e4 - model.book.edgeBps) / q.multBps) * 100) : null;
-          const txt = `$${s.toFixed(2)} → ${money((s * q.multBps) / 1e4)}${chance !== null ? ` · ${chance}% chance` : ""}`;
+          const g = goldenAt(hover.k), eligible = g && q.multBps >= GOLDEN_MIN_MULT_BPS;
+          const extra = eligible ? " · ★ + Golden Tap" : g ? " · under 2x: no Golden Tap" : "";
+          const txt = `$${s.toFixed(2)} → ${money((s * q.multBps) / 1e4)}${chance !== null ? ` · ${chance}% chance` : ""}${extra}`;
           ctx.font = `600 11px ${monoFont}`;
           const tw = ctx.measureText(txt).width + 14;
           const x = xOf(hover.k * col) + colPx / 2, y = yOf((hover.j + 1) * band) - 8;
           const bx = clamp(x - tw / 2, nowX + 2, AX - tw - 2), by = Math.max(24, y - 22);
-          ctx.fillStyle = T.ink; ctx.fillRect(bx, by, tw, 20);
+          ctx.fillStyle = eligible ? T.gold : T.ink; ctx.fillRect(bx, by, tw, 20);
           ctx.fillStyle = T.bg; ctx.textAlign = "left"; ctx.textBaseline = "middle"; ctx.fillText(txt, bx + 7, by + 10.5);
         }
       }

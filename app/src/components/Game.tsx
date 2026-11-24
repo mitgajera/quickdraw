@@ -102,7 +102,7 @@ export function Game() {
 
   const price = model.price === null ? null : Number(model.price) / 1e8;
   // change over the last minute of on-chain prices
-  const minuteAgo = model.hist.find((h) => h.t >= Date.now() / 1000 - model.clockOffset - 60);
+  const minuteAgo = model.hist.find((h) => h.t >= Date.now() / 1000 - 60);
   const change = price !== null && minuteAgo ? ((price - minuteAgo.p) / minuteAgo.p) * 100 : 0;
 
   const player = model.player;
@@ -315,7 +315,7 @@ export function Game() {
             </div>
           </div>
           <div className="boardwrap">
-            <Board model={model} stake={stake} canTap={account.stage === "ready" && model.recording} onTap={onTap} onReject={onReject} onBlocked={onBlocked} />
+            <Board model={model} stake={stake} canTap={account.stage === "ready" && model.recording} onTap={onTap} onReject={onReject} onBlocked={onBlocked} onHint={(t) => say(t)} />
             {limitHit && account.stage === "ready" && (
               <div className="notice" role="status">Session loss limit reached (${lossLimit}). Tapping is paused; <a href="/profile">change it</a> or come back later.</div>
             )}
