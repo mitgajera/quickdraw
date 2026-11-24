@@ -43,7 +43,7 @@ export const WALLET_TAP_FLAG = 0x8000_0000;
 /** Set on the id of a tap placed in its market's golden column. */
 export const GOLDEN_TAP_FLAG = 0x4000_0000;
 /** Golden columns: one VRF seed per round of this many seconds picks one column per market (lib.rs). */
-export const ROUND_SECS = 60;
+export const ROUND_SECS = 28;
 export const LUCKY_ROUNDS = 4;
 /** A golden-column win mints a Golden Tap at this multiplier or more. */
 export const GOLDEN_MIN_MULT_BPS = 20_000;

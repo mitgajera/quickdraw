@@ -168,6 +168,9 @@ export const ix = {
   /** Golden columns (one-time): create the draw account on Solana, then move it to the rollup. */
   initLucky: (authority: PublicKey) => buildIx("init_lucky", { authority, lucky: luckyPda() }),
   delegateLucky: (payer: PublicKey) => buildIx("delegate_lucky", { payer, lucky: luckyPda() }, {}, [ER_VALIDATOR]),
+  /** Names the Golden Tap (Metaplex metadata); only the golden columns' authority may call it. */
+  goldenMetadata: (authority: PublicKey, name: string, symbol: string, uri: string) =>
+    buildIx("golden_metadata", { authority, lucky: luckyPda() }, { name, symbol, uri }),
   /** Asks MagicBlock VRF (on the rollup, free) for a round's seed. Permissionless. */
   requestLucky: (payer: PublicKey, round: number) =>
     buildIx("request_lucky", { payer, lucky: luckyPda(), oracle_queue: VRF_EPHEMERAL_QUEUE }, { round: BigInt(round) }),
