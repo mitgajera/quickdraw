@@ -3,8 +3,9 @@
 // addresses publicly. When a wallet runs low the keeper tops it up from its own USDC, so they keep going.
 import { ComputeBudgetProgram, Transaction, type Connection, type Keypair } from "@solana/web3.js";
 import {
-  ataOf, boxAt, decodeBook, decodeCandles, decodeMarket, decodeOracle, bookPda, explainError,
-  idealZoom, ix, quoteBox, rowHeight, sendWithKeypairs, sigmaFor, transferTokens, type MarketKeys,
+  GOLDEN_MIN_MULT_BPS, ataOf, boxAt, decodeBook, decodeCandles, decodeLucky, decodeMarket, decodeOracle, bookPda,
+  explainError, goldenColumnStart, idealZoom, ix, luckyPda, quoteBox, rowHeight, sendWithKeypairs, sigmaFor,
+  transferTokens, type MarketKeys,
 } from "@quickdraw/sdk";
 
 const between = (lo: number, hi: number) => lo + Math.random() * (hi - lo);
@@ -32,7 +33,7 @@ async function tapOnce(er: Connection, bot: Keypair, markets: MarketKeys[], wall
   const stake = stakes[Math.floor(Math.random() * stakes.length)]!;
 
   const m = chooseMarket(markets);
-  const [mi, bi, ci, oi] = await er.getMultipleAccountsInfo([m.market, bookPda(), m.candles, m.oracle]);
+  const [mi, bi, ci, oi, li] = await er.getMultipleAccountsInfo([m.market, bookPda(), m.candles, m.oracle, luckyPda()]);
   if (!mi || !bi || !ci || !oi) return `${m.symbol} accounts missing`;
   const market = decodeMarket(mi.data), book = decodeBook(bi.data), candles = decodeCandles(ci.data), o = decodeOracle(oi.data);
   const sigma = sigmaFor(market, candles, o.publishTime);
@@ -40,10 +41,15 @@ async function tapOnce(er: Connection, bot: Keypair, markets: MarketKeys[], wall
   const row = o.price / rowHeight(market, zoom);
   const colNow = Math.floor(o.publishTime / market.colSecs);
   // mostly the safer boxes near the price, now and then a long shot, like a person would
-  const [lo, hi] = Math.random() < 0.15 ? [40_000, 120_000] : [13_000, 40_000];
+  let [lo, hi] = Math.random() < 0.15 ? [40_000, 120_000] : [13_000, 40_000];
+  // when this round's golden column is in reach, often go for it (2x and up can win a Golden Tap)
+  const goldenStart = li ? goldenColumnStart(decodeLucky(li.data), m.market, market.colSecs, (colNow + 3) * market.colSecs) : null;
+  const goldenCol = goldenStart === null ? null : goldenStart / market.colSecs;
+  const chaseGolden = goldenCol !== null && goldenCol >= colNow + 2 && goldenCol <= colNow + 4 && Math.random() < 0.6;
+  if (chaseGolden) [lo, hi] = [GOLDEN_MIN_MULT_BPS, 60_000];
 
   for (let attempt = 0; attempt < 16; attempt++) {
-    const column = colNow + 2 + Math.floor(Math.random() * 3);
+    const column = chaseGolden ? goldenCol! : colNow + 2 + Math.floor(Math.random() * 3);
     const bandIndex = row + BigInt(Math.round(between(-3.5, 3.5)));
     const q = quoteBox(book, boxAt(market, bandIndex, column, zoom), o.price, o.publishTime, sigma, stake);
     if (!q.ok || q.multBps < lo || q.multBps > hi) continue;

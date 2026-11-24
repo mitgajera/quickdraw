@@ -6,7 +6,8 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 import { ComputeBudgetProgram, Connection, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction, type Keypair } from "@solana/web3.js";
 import {
   PLAYER_SIZE, PROGRAM_ID, WALLET_TAP_FLAG, actionEscrowPda, ataOf, createAtaIdempotent, decodeCandles, decodePlayer, explainError, ix,
-  marketKeys, parseEvents, playerPda, sendWithKeypairs, transferTokens, type MarketKeys,
+  ROUND_SECS, decodeLucky, luckyPda, luckySeed, marketKeys, parseEvents, playerPda, sendWithKeypairs, transferTokens,
+  type MarketKeys,
 } from "@quickdraw/sdk";
 import { botKeypairs, config, keeperKeypair } from "./config";
 import { startCrowd } from "./crowd";
@@ -21,7 +22,7 @@ const stats = {
   startedAt: new Date().toISOString(),
   ticks: 0, tickErrors: 0, lastTickMs: 0,
   settles: 0, settleErrors: 0, wins: 0, losses: 0, voids: 0,
-  players: 0, openTaps: 0, sponsored: 0, welcomed: 0, welcomeUsdc: 0,
+  players: 0, openTaps: 0, sponsored: 0, welcomed: 0, welcomeUsdc: 0, rounds: 0,
 };
 const log = (...a: unknown[]) => console.log(new Date().toISOString().slice(11, 23), ...a);
 
@@ -152,6 +153,26 @@ async function settle(owner: PublicKey, m: MarketKeys, key: string, wallet: bool
   } finally {
     inflight.delete(key);
   }
+}
+
+// ---------- golden columns: ask MagicBlock VRF for each round's seed (free on the rollup) ----------
+async function drawRounds() {
+  const info = await er.getAccountInfo(luckyPda());
+  if (!info) return; // golden columns not set up on this deployment
+  const lucky = decodeLucky(info.data);
+  const now = Math.floor(Date.now() / 1000 / ROUND_SECS);
+  for (const round of [now, now + 1]) {
+    if (luckySeed(lucky, round)) continue;
+    await sendWithKeypairs(er, [ix.requestLucky(keeper.publicKey, round)], [keeper], { skipPreflight: true });
+    stats.rounds++;
+  }
+}
+
+function luckyLoop() {
+  let quiet = 0;
+  const run = () => void drawRounds().catch((e) => { if (quiet++ % 20 === 0) log("vrf request failed", explainError(e)); });
+  run();
+  setInterval(run, 20_000);
 }
 
 // ---------- the escrow that pays for Magic Actions on Solana ----------
@@ -293,6 +314,7 @@ for (const m of markets) {
   tickLoop(m);
 }
 settleLoop();
+luckyLoop();
 void countPlayers().catch(() => {});
 setInterval(() => void countPlayers().catch(() => {}), 5 * 60_000);
 serve();
