@@ -48,4 +48,8 @@ pub enum QuickdrawError {
     AllowanceTooLow,
     #[msg("Only a Quickdraw Magic Action may call this")]
     NotMagicAction,
+    #[msg("That golden-column round is not open for a draw")]
+    RoundNotOpen,
+    #[msg("That golden-column round is already drawn")]
+    RoundDrawn,
 }

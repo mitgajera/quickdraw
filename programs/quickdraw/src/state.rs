@@ -9,6 +9,12 @@ pub const MAX_TAPS: usize = 12;
 /// Set on the id of a tap paid for straight from the player's wallet (see `place_wallet_tap`).
 pub const WALLET_TAP_FLAG: u32 = 1 << 31;
 
+/// Set on the id of a tap placed in its market's golden column (see `Lucky`).
+pub const GOLDEN_TAP_FLAG: u32 = 1 << 30;
+
+/// Rounds of VRF seeds `Lucky` keeps (the current one, the next, and a little history).
+pub const LUCKY_ROUNDS: usize = 4;
+
 /// Collected wallet-tap ids a ledger remembers (more than `MAX_TAPS` open taps can need).
 pub const LEDGER_RING: usize = 32;
 
@@ -343,5 +349,114 @@ impl Ledger {
         let i = self.head as usize % LEDGER_RING;
         self.collected[i] = id;
         self.head = ((i + 1) % LEDGER_RING) as u8;
+    }
+}
+
+/// The golden columns (ER). Time is cut into rounds of `ROUND_SECS`; MagicBlock VRF draws one random
+/// seed per round, and the seed picks one golden column per market in that round. A win of at least
+/// `GOLDEN_MIN_MULT_BPS` in a golden column also mints a Golden Tap collectible to the winner.
+/// A round's seed is written once, by the VRF callback, and can never be replaced.
+#[account]
+#[derive(InitSpace)]
+pub struct Lucky {
+    pub authority: Pubkey,
+    /// Round number held in each slot (`round % LUCKY_ROUNDS`); 0 means empty.
+    pub rounds: [i64; LUCKY_ROUNDS],
+    pub seeds: [[u8; 32]; LUCKY_ROUNDS],
+    pub bump: u8,
+}
+
+impl Lucky {
+    fn slot(round: i64) -> usize {
+        round.rem_euclid(LUCKY_ROUNDS as i64) as usize
+    }
+
+    /// This round's VRF seed, if it has been drawn.
+    pub fn seed_for(&self, round: i64) -> Option<&[u8; 32]> {
+        let i = Self::slot(round);
+        (round > 0 && self.rounds[i] == round).then_some(&self.seeds[i])
+    }
+
+    /// Stores a round's seed. Returns false (and changes nothing) if that round already has one.
+    pub fn set_seed(&mut self, round: i64, seed: [u8; 32]) -> bool {
+        if round <= 0 || self.seed_for(round).is_some() {
+            return false;
+        }
+        let i = Self::slot(round);
+        self.rounds[i] = round;
+        self.seeds[i] = seed;
+        true
+    }
+
+    /// Whether the column starting at `start` (unix seconds) is this market's golden column.
+    pub fn is_golden(&self, market: &Pubkey, col_secs: u32, start: i64, round_secs: i64) -> bool {
+        if col_secs == 0 || round_secs % col_secs as i64 != 0 {
+            return false;
+        }
+        let round = start.div_euclid(round_secs);
+        match self.seed_for(round) {
+            Some(seed) => {
+                let cols = (round_secs / col_secs as i64) as u64;
+                let index = (start - round * round_secs) / col_secs as i64;
+                golden_index(seed, market, cols) == index as u64
+            }
+            None => false,
+        }
+    }
+}
+
+/// Which column of a round (0..cols) is golden for a market: the VRF seed mixed with the market's
+/// address, so every market gets its own column from the same draw.
+pub fn golden_index(seed: &[u8; 32], market: &Pubkey, cols: u64) -> u64 {
+    let mut x = 0xcbf2_9ce4_8422_2325u64; // FNV-1a over seed || market
+    for b in seed.iter().chain(market.as_ref().iter()) {
+        x ^= *b as u64;
+        x = x.wrapping_mul(0x0100_0000_01b3);
+    }
+    x % cols.max(1)
+}
+
+#[cfg(test)]
+mod lucky_tests {
+    use super::*;
+
+    fn lucky() -> Lucky {
+        Lucky { authority: Pubkey::default(), rounds: [0; LUCKY_ROUNDS], seeds: [[0; 32]; LUCKY_ROUNDS], bump: 0 }
+    }
+
+    #[test]
+    fn a_round_seed_is_written_once() {
+        let mut l = lucky();
+        assert!(l.seed_for(100).is_none());
+        assert!(l.set_seed(100, [7; 32]));
+        assert!(!l.set_seed(100, [9; 32]), "the VRF seed of a round can never be replaced");
+        assert_eq!(l.seed_for(100), Some(&[7; 32]));
+        assert!(l.set_seed(104, [1; 32]), "four rounds later the slot is reused");
+        assert!(l.seed_for(100).is_none());
+    }
+
+    #[test]
+    fn exactly_one_golden_column_per_round_and_market() {
+        let mut l = lucky();
+        let round_secs = 60;
+        l.set_seed(1000, [42; 32]);
+        for market in [Pubkey::new_unique(), Pubkey::new_unique(), Pubkey::new_unique()] {
+            let golden = (0..15).filter(|c| l.is_golden(&market, 4, 1000 * round_secs + c * 4, round_secs)).count();
+            assert_eq!(golden, 1);
+        }
+        // no seed drawn for the next round yet: nothing is golden there
+        assert!((0..15).all(|c| !l.is_golden(&Pubkey::new_unique(), 4, 1001 * round_secs + c * 4, round_secs)));
+    }
+
+    #[test]
+    fn golden_index_spreads_over_the_round() {
+        let market = Pubkey::new_unique();
+        let mut seen = [0u32; 15];
+        for i in 0..3000u32 {
+            let mut seed = [0u8; 32];
+            seed[..4].copy_from_slice(&i.to_le_bytes());
+            seen[golden_index(&seed, &market, 15) as usize] += 1;
+        }
+        assert!(seen.iter().all(|&n| n > 120 && n < 280), "{seen:?}");
     }
 }

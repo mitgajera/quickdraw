@@ -36,3 +36,18 @@ pub struct TapSettled {
     pub low: i64,
     pub high: i64,
 }
+
+/// A golden-column round was drawn by MagicBlock VRF.
+#[event]
+pub struct LuckyRound {
+    pub round: i64,
+    pub seed: [u8; 32],
+}
+
+/// A golden-column win: `count` Golden Taps are on their way to the player's wallet.
+#[event]
+pub struct GoldenWin {
+    pub player: Pubkey,
+    pub market: Pubkey,
+    pub count: u8,
+}

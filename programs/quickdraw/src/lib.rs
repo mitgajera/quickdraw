@@ -56,6 +56,15 @@ pub const CALM_FLOOR_RATIO: f64 = 0.5;
 /// After this long past a column, taps settle on whatever the ring holds (refund if nothing).
 pub const SETTLE_TIMEOUT_SECS: i64 = 30;
 
+/// The golden-column draw (see `state::Lucky`): one VRF seed per round of this many seconds.
+pub const LUCKY_SEED: &[u8] = b"lucky";
+pub const ROUND_SECS: i64 = 60;
+/// A golden-column win mints a Golden Tap only at this multiplier or more (no farming 1.1x boxes).
+pub const GOLDEN_MIN_MULT_BPS: u32 = 20_000;
+/// The Golden Tap collectible (0 decimals). Only `golden-auth` can mint it, through `mint_golden`.
+pub const GOLDEN_MINT: Pubkey = pubkey!("ETsjfkbgiMEAmya1EgytD779DG3FuQAnFs5sPBDCEZP");
+pub const GOLDEN_AUTH_SEED: &[u8] = b"golden-auth";
+
 #[ephemeral]
 #[program]
 pub mod quickdraw {
@@ -189,5 +198,27 @@ pub mod quickdraw {
         amount: u64,
     ) -> Result<()> {
         instructions::pay_out_handler(ctx, owner, amount)
+    }
+
+    pub fn mint_golden<'info>(ctx: Context<'info, WalletAction>, owner: Pubkey, count: u8) -> Result<()> {
+        instructions::mint_golden_handler(ctx, owner, count)
+    }
+
+    // --- golden columns: one random column per round and market, drawn with MagicBlock VRF ---
+
+    pub fn init_lucky(ctx: Context<InitLucky>) -> Result<()> {
+        instructions::init_lucky_handler(ctx)
+    }
+
+    pub fn delegate_lucky(ctx: Context<DelegateLucky>) -> Result<()> {
+        instructions::delegate_lucky_handler(ctx)
+    }
+
+    pub fn request_lucky(ctx: Context<RequestLucky>, round: i64) -> Result<()> {
+        instructions::request_lucky_handler(ctx, round)
+    }
+
+    pub fn callback_lucky(ctx: Context<CallbackLucky>, randomness: [u8; 32], round: i64) -> Result<()> {
+        instructions::callback_lucky_handler(ctx, randomness, round)
     }
 }

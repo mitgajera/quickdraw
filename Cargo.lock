@@ -1410,6 +1410,7 @@ dependencies = [
  "ephemeral-rollups-sdk-attribute-ephemeral",
  "ephemeral-rollups-sdk-attribute-ephemeral-accounts",
  "ephemeral-vrf-sdk",
+ "ephemeral-vrf-sdk-vrf-macro",
  "five8 0.2.1",
  "getrandom 0.2.17",
  "magicblock-delegation-program-api",

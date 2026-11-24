@@ -14,19 +14,20 @@
 
 use anchor_lang::prelude::*;
 use anchor_lang::InstructionData;
-use anchor_spl::token::{self, TokenAccount, TransferChecked};
+use anchor_spl::token::{self, MintTo, TokenAccount, TransferChecked};
 use ephemeral_rollups_sdk::anchor::commit;
 use ephemeral_rollups_sdk::ephem::{CallHandler, MagicIntentBundleBuilder};
 use ephemeral_rollups_sdk::{ActionArgs, ShortAccountMeta};
 
 use crate::error::QuickdrawError;
-use crate::events::{TapPlaced, TapSettled};
+use crate::events::{GoldenWin, TapPlaced, TapSettled};
 use crate::oracle::read_oracle_price;
-use crate::state::{Book, Candles, Ledger, Market, Outcome, Player, TapSlot, MAX_TAPS, WALLET_TAP_FLAG};
+use crate::state::{Book, Candles, Ledger, Lucky, Market, Outcome, Player, TapSlot, GOLDEN_TAP_FLAG, MAX_TAPS, WALLET_TAP_FLAG};
 use crate::tap::{has_capacity, quote};
 use crate::{
-    BOOK_SEED, ESCROW_AUTH_SEED, ESCROW_INDEX, LEDGER_SEED, MARKET_SEED, MINT_DECIMALS, PLAYER_SEED,
-    SETTLE_TIMEOUT_SECS, TAP_ORACLE_MAX_AGE, USDC_MINT, VAULT_SEED, VAULT_TOKENS_SEED,
+    BOOK_SEED, ESCROW_AUTH_SEED, ESCROW_INDEX, GOLDEN_AUTH_SEED, GOLDEN_MINT, GOLDEN_MIN_MULT_BPS, LEDGER_SEED,
+    LUCKY_SEED, MARKET_SEED, MINT_DECIMALS, PLAYER_SEED, ROUND_SECS, SETTLE_TIMEOUT_SECS, TAP_ORACLE_MAX_AGE, USDC_MINT,
+    VAULT_SEED, VAULT_TOKENS_SEED,
 };
 
 /// MagicBlock's delegation program: it executes Magic Actions on Solana and signs for the escrow.
@@ -43,6 +44,15 @@ pub fn usdc_ata(owner: &Pubkey) -> Pubkey {
     Pubkey::find_program_address(&[owner.as_ref(), token::ID.as_ref(), USDC_MINT.as_ref()], &ATA_PROGRAM_ID).0
 }
 
+/// The player's Golden Tap token account (the app creates it during setup).
+pub fn golden_ata(owner: &Pubkey) -> Pubkey {
+    Pubkey::find_program_address(&[owner.as_ref(), token::ID.as_ref(), GOLDEN_MINT.as_ref()], &ATA_PROGRAM_ID).0
+}
+
+fn meta(pubkey: Pubkey, is_writable: bool) -> ShortAccountMeta {
+    ShortAccountMeta { pubkey: pubkey.to_bytes().into(), is_writable }
+}
+
 /// The escrow PDA the delegation program signs for when it runs an action we scheduled.
 pub fn action_escrow(escrow_auth: &Pubkey) -> Pubkey {
     Pubkey::find_program_address(&[b"balance", escrow_auth.as_ref(), &[ESCROW_INDEX]], &DELEGATION_PROGRAM_ID).0
@@ -50,7 +60,6 @@ pub fn action_escrow(escrow_auth: &Pubkey) -> Pubkey {
 
 /// The base-layer accounts every wallet action touches, in the order the handlers look for them.
 fn action_accounts(owner: &Pubkey) -> Vec<ShortAccountMeta> {
-    let meta = |pubkey: Pubkey, is_writable: bool| ShortAccountMeta { pubkey: pubkey.to_bytes().into(), is_writable };
     vec![
         meta(ledger_address(owner), true),
         meta(usdc_ata(owner), true),
@@ -61,14 +70,25 @@ fn action_accounts(owner: &Pubkey) -> Vec<ShortAccountMeta> {
     ]
 }
 
+/// The base-layer accounts `mint_golden` touches.
+fn golden_accounts(owner: &Pubkey) -> Vec<ShortAccountMeta> {
+    vec![
+        meta(golden_ata(owner), true),
+        meta(GOLDEN_MINT, true),
+        meta(Pubkey::find_program_address(&[GOLDEN_AUTH_SEED], &crate::ID).0, false),
+        meta(token::ID, false),
+    ]
+}
+
 /// Schedules one Magic Action on Solana, signed for by this program's escrow-auth PDA.
+#[allow(clippy::too_many_arguments)]
 fn schedule_action<'info>(
     payer: AccountInfo<'info>,
     magic_context: AccountInfo<'info>,
     magic_program: AccountInfo<'info>,
     escrow_auth: AccountInfo<'info>,
     escrow_auth_bump: u8,
-    owner: &Pubkey,
+    accounts: Vec<ShortAccountMeta>,
     data: Vec<u8>,
 ) -> Result<()> {
     // the builder copies `is_signer` from the AccountInfo into the CPI; this PDA signs via the seeds
@@ -79,7 +99,7 @@ fn schedule_action<'info>(
         compute_units: ACTION_COMPUTE_UNITS,
         escrow_authority: escrow_auth,
         destination_program: crate::ID,
-        accounts: action_accounts(owner),
+        accounts,
     };
     MagicIntentBundleBuilder::new(payer, magic_context, magic_program)
         .add_standalone_actions([action])
@@ -144,11 +164,16 @@ pub fn place_wallet_tap_handler<'info>(
     }
     require!(has_capacity(&accounts.book, stake, q.payout), QuickdrawError::ExposureLimit);
 
+    // the golden column of this round (MagicBlock VRF), when the app passes the lucky account along
+    let golden = lucky_in(ctx.remaining_accounts)
+        .is_some_and(|lucky| lucky.is_golden(&accounts.market.key(), accounts.market.col_secs, q.start, ROUND_SECS));
+
     let player = &mut accounts.player;
     require!(!player.has_tap_in_column(&accounts.market.key(), q.start), QuickdrawError::ColumnTaken);
     let slot = player.free_slot().ok_or(QuickdrawError::TooManyTaps)?;
-    let id = (player.next_id & !WALLET_TAP_FLAG) | WALLET_TAP_FLAG;
-    player.next_id = player.next_id.wrapping_add(1) & !WALLET_TAP_FLAG;
+    let flags = WALLET_TAP_FLAG | if golden { GOLDEN_TAP_FLAG } else { 0 };
+    let id = (player.next_id & !(WALLET_TAP_FLAG | GOLDEN_TAP_FLAG)) | flags;
+    player.next_id = player.next_id.wrapping_add(1) & !(WALLET_TAP_FLAG | GOLDEN_TAP_FLAG);
     player.taps_placed = player.taps_placed.saturating_add(1);
     player.taps[slot] = TapSlot {
         market: accounts.market.key(),
@@ -191,9 +216,17 @@ pub fn place_wallet_tap_handler<'info>(
         accounts.magic_program.to_account_info(),
         accounts.escrow_auth.to_account_info(),
         ctx.bumps.escrow_auth,
-        &owner,
+        action_accounts(&owner),
         crate::instruction::CollectStake { owner, tap_id: id, amount: stake }.data(),
     )
+}
+
+/// The `Lucky` account, if the caller passed it among the remaining accounts.
+fn lucky_in(remaining: &[AccountInfo]) -> Option<Lucky> {
+    let address = Pubkey::find_program_address(&[LUCKY_SEED], &crate::ID).0;
+    let info = remaining.iter().find(|a| a.key == &address && a.owner == &crate::ID)?;
+    let data = info.try_borrow_data().ok()?;
+    Lucky::try_deserialize(&mut &data[..]).ok()
 }
 
 /// Settles this player's decidable wallet taps in this market (ER, permissionless) and pays the
@@ -205,6 +238,7 @@ pub fn settle_wallet_handler<'info>(ctx: Context<'info, SettleWallet<'info>>) ->
     let owner = ctx.accounts.player.owner;
     let mut to_pay: u64 = 0;
     let mut settled = 0;
+    let mut golden: u8 = 0;
     {
         let candles = ctx.accounts.candles.load()?;
         let ledger = &ctx.accounts.ledger;
@@ -236,6 +270,9 @@ pub fn settle_wallet_handler<'info>(ctx: Context<'info, SettleWallet<'info>>) ->
             } else {
                 match outcome {
                     Outcome::Win => {
+                        if tap.id & GOLDEN_TAP_FLAG != 0 && tap.mult_bps >= GOLDEN_MIN_MULT_BPS {
+                            golden = golden.saturating_add(1);
+                        }
                         player.wins = player.wins.saturating_add(1);
                         player.streak = player.streak.saturating_add(1);
                         player.best_streak = player.best_streak.max(player.streak);
@@ -285,9 +322,23 @@ pub fn settle_wallet_handler<'info>(ctx: Context<'info, SettleWallet<'info>>) ->
             accounts.magic_program.to_account_info(),
             accounts.escrow_auth.to_account_info(),
             ctx.bumps.escrow_auth,
-            &owner,
+            action_accounts(&owner),
             crate::instruction::PayOut { owner, amount: to_pay }.data(),
         )?;
+    }
+    if golden > 0 {
+        // a separate action, so the collectible can never hold up or undo the USDC payout
+        let accounts = &ctx.accounts;
+        schedule_action(
+            accounts.payer.to_account_info(),
+            accounts.magic_context.to_account_info(),
+            accounts.magic_program.to_account_info(),
+            accounts.escrow_auth.to_account_info(),
+            ctx.bumps.escrow_auth,
+            golden_accounts(&owner),
+            crate::instruction::MintGolden { owner, count: golden }.data(),
+        )?;
+        emit!(GoldenWin { player: player_key, market: market_key, count: golden });
     }
     Ok(())
 }
@@ -379,6 +430,34 @@ pub fn pay_out_handler<'info>(ctx: Context<'info, WalletAction>, owner: Pubkey, 
     require_keys_eq!(ledger.owner, owner, QuickdrawError::Unauthorized);
     ledger.paid_total = ledger.paid_total.saturating_add(amount);
     ledger.exit(&crate::ID)?;
+    Ok(())
+}
+
+/// Magic Action (Solana): mints `count` Golden Taps to the winner. Skips (without failing) if the
+/// player has no Golden Tap token account yet, so it can never block anything else.
+pub fn mint_golden_handler<'info>(ctx: Context<'info, WalletAction>, owner: Pubkey, count: u8) -> Result<()> {
+    let all = ctx.remaining_accounts;
+    let escrow_auth = Pubkey::find_program_address(&[ESCROW_AUTH_SEED], &crate::ID).0;
+    require!(find(all, &action_escrow(&escrow_auth))?.is_signer, QuickdrawError::NotMagicAction);
+    let destination = find(all, &golden_ata(&owner))?;
+    if destination.owner != &token::ID || destination.data_len() != TokenAccount::LEN {
+        msg!("no Golden Tap account for {}; skipped", owner);
+        return Ok(());
+    }
+    let (authority, bump) = Pubkey::find_program_address(&[GOLDEN_AUTH_SEED], &crate::ID);
+    let bump = [bump];
+    token::mint_to(
+        CpiContext::new_with_signer(
+            find(all, &token::ID)?.key(),
+            MintTo {
+                mint: find(all, &GOLDEN_MINT)?.clone(),
+                to: destination.clone(),
+                authority: find(all, &authority)?.clone(),
+            },
+            &[&[GOLDEN_AUTH_SEED, &bump]],
+        ),
+        count as u64,
+    )?;
     Ok(())
 }
 
