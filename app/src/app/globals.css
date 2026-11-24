@@ -363,3 +363,10 @@ kbd { font-family: var(--font-mono), monospace; font-size: 11px; padding: 1px 6p
 .golden-coin { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-size: 20px;
   color: var(--bg); background: radial-gradient(circle at 35% 30%, #FFE9A3, var(--gold) 60%, #9A6B0A); box-shadow: 0 0 18px color-mix(in srgb, var(--gold) 40%, transparent); }
 .golden-n { font-family: var(--font-mono, ui-monospace), monospace; font-size: 26px; color: var(--gold); }
+
+/* Golden Hall and golden names: holders of Golden Taps show in gold everywhere */
+.goldname { color: var(--gold) !important; }
+.goldtxt { color: var(--gold) !important; }
+.hallh { font-size: 12px; font-weight: 600; letter-spacing: .02em; margin: 4px 0 8px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.hallh:not(:first-child) { margin-top: 16px; }
+.list.hall li { background: color-mix(in srgb, var(--gold) 6%, transparent); border-radius: 8px; }

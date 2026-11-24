@@ -2,19 +2,21 @@
 // taps. The canvas reads the mutable model every frame; React re-renders from `version` bumps.
 import type { PublicKey } from "@solana/web3.js";
 import {
-  CANDLE_SLOTS, PLAYER_SIZE, PROGRAM_ID, bookPda, decodeBook, decodeCandles, decodeLucky, decodeMarket, decodeOracle,
+  CANDLE_SLOTS, GOLDEN_MIN_MULT_BPS, GOLDEN_TAP_FLAG, PLAYER_SIZE, PROGRAM_ID, bookPda, decodeBook, decodeCandles, decodeLucky, decodeMarket, decodeOracle,
   decodePlayer, idealZoom, judge, luckyPda, marketKeys, payoutOf, playerPda, rangeAt, sigmaFor, windowRange,
   type Book, type Candles, type Lucky, type Market, type MarketKeys, type Player, type Symbol, type TapSlot,
 } from "@quickdraw/sdk";
-import { base, er } from "./chain";
+import { KEEPER_URL, base, er } from "./chain";
 
 export interface PricePoint { t: number; p: number }
 /** The on-chain price evidence for one settled tap: per-second high/low the keeper recorded in its window. */
 export interface Evidence { low: bigint | null; high: bigint | null; bars: { sec: number; high: bigint; low: bigint }[] }
 export interface Result { tap: TapSlot; outcome: "win" | "lose" | "void"; at: number; payout: bigint; evidence: Evidence | null }
 export interface Pending { key: string; lo: bigint; hi: bigint; column: number; stake: bigint; multBps: number; at: number }
-export interface FeedItem { id: string; who: string; me: boolean; text: string; tone: "win" | "loss" | "" }
+export interface FeedItem { id: string; who: string; me: boolean; text: string; tone: "win" | "loss" | ""; owner?: string }
 export interface Leader { owner: string; pnl: bigint; wins: number; taps: number; me: boolean }
+/** A Golden Tap holder (the Golden Hall). */
+export interface GoldenHolder { owner: string; count: number; me: boolean }
 
 /** Captures the candle ring's record of a tap's window at the moment it settles (the ring wraps after 256s). */
 function evidenceFor(c: Candles, t: TapSlot): Evidence {
@@ -78,6 +80,10 @@ export class LiveModel {
   others: { owner: PublicKey; taps: TapSlot[] }[] = [];
   leaders: Leader[] = [];
   feed: FeedItem[] = [];
+  /** Golden Tap holders, most first (read from the token's largest accounts on Solana). */
+  goldenHall: GoldenHolder[] = [];
+  /** owner -> Golden Taps held, for golden names in the feed and leaderboard */
+  golden = new Map<string, number>();
   results: Result[] = [];
   pending: Pending[] = [];
   /** "✓ 52ms" chips drawn over freshly confirmed taps */
@@ -126,6 +132,8 @@ export class LiveModel {
     this.timers.push(setInterval(() => void this.fast(), 250));
     this.timers.push(setInterval(() => void this.slow(), 1000));
     this.timers.push(setInterval(() => void this.everyone(), 2000));
+    void this.loadGoldenHall();
+    this.timers.push(setInterval(() => void this.loadGoldenHall(), 30_000));
     this.timers.push(setInterval(() => this.bump(), 500));
   }
 
@@ -197,10 +205,12 @@ export class LiveModel {
         };
         fresh.push(result);
         this.results.push(result);
+        const golden = (t.id & GOLDEN_TAP_FLAG) !== 0 && t.multBps >= GOLDEN_MIN_MULT_BPS;
         this.pushFeed({
           id: `r${t.id}-${result.at}`, who: "you", me: true, tone: outcome === "win" ? "win" : outcome === "lose" ? "loss" : "",
-          text: outcome === "win" ? `won ${usd(result.payout)}` : outcome === "lose" ? `lost ${usd(t.stake)}` : `refunded ${usd(t.stake)}`,
+          text: outcome === "win" ? `won ${usd(result.payout)}${golden ? " + ★ Golden Tap" : ""}` : outcome === "lose" ? `lost ${usd(t.stake)}` : `refunded ${usd(t.stake)}`,
         });
+        if (golden && outcome === "win") setTimeout(() => void this.loadGoldenHall(), 4000); // the mint lands a moment later
         this.resultListeners.forEach((f) => f(result));
       });
       if (fresh.length) void this.refreshEvidence(fresh);
@@ -273,6 +283,21 @@ export class LiveModel {
     if (pts.length) this.hist = [...pts, ...this.hist].sort((a, b) => a.t - b.t);
   }
 
+  /**
+   * The Golden Hall: Golden Tap holders. The keeper reads them from Solana once a minute (public RPCs
+   * rate-limit that call hard), so this is one small request to the keeper.
+   */
+  private async loadGoldenHall() {
+    if (this.stopped) return;
+    try {
+      const list = (await (await fetch(`${KEEPER_URL}/golden`)).json()) as { owner: string; count: number }[];
+      const me = this.owner?.toBase58();
+      this.golden = new Map(list.map((h) => [h.owner, h.count]));
+      this.goldenHall = list.slice(0, 10).map((h) => ({ ...h, me: h.owner === me }));
+      this.bump();
+    } catch { /* keeper waking up; next round */ }
+  }
+
   /** every player's open taps and stats, every 2 seconds */
   private async everyone() {
     if (this.stopped) return;
@@ -295,15 +320,17 @@ export class LiveModel {
         if (seen) {
           for (const t of o.taps) {
             if (!seen.has(t.id)) {
-              this.pushFeed({ id: `${k}-${t.id}`, who: this.name(o.owner), me: false, tone: "", text: `${usd(t.stake)} · ${mult(t.multBps)}` });
+              const g = (t.id & GOLDEN_TAP_FLAG) !== 0 && t.multBps >= GOLDEN_MIN_MULT_BPS;
+              this.pushFeed({ id: `${k}-${t.id}`, who: this.name(o.owner), me: false, tone: "", owner: k, text: `${usd(t.stake)} · ${mult(t.multBps)}${g ? " ★" : ""}` });
             }
           }
           // their taps that closed since last scan: same rule the keeper settled them by
           for (const [id, t] of seen) {
             if (o.taps.some((x) => x.id === id) || !this.candles) continue;
             const outcome = judge(this.candles, t.lo, t.hi, t.start, t.end, Math.max(this.publishTime, t.end));
-            if (outcome === "win") this.pushFeed({ id: `${k}-${id}-w`, who: this.name(o.owner), me: false, tone: "win", text: `won ${usd(payoutOf(t))}` });
-            else if (outcome === "lose") this.pushFeed({ id: `${k}-${id}-l`, who: this.name(o.owner), me: false, tone: "loss", text: `lost ${usd(t.stake)}` });
+            const golden = (t.id & GOLDEN_TAP_FLAG) !== 0 && t.multBps >= GOLDEN_MIN_MULT_BPS;
+            if (outcome === "win") this.pushFeed({ id: `${k}-${id}-w`, who: this.name(o.owner), me: false, tone: "win", owner: k, text: golden ? `won ${usd(payoutOf(t))} + ★ Golden Tap` : `won ${usd(payoutOf(t))}` });
+            else if (outcome === "lose") this.pushFeed({ id: `${k}-${id}-l`, who: this.name(o.owner), me: false, tone: "loss", owner: k, text: `lost ${usd(t.stake)}` });
           }
         }
         this.seenOthers.set(k, new Map(o.taps.map((t) => [t.id, t])));

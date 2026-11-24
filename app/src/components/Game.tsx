@@ -363,23 +363,44 @@ export function Game() {
                   {model.feed.map((f) => (
                     <li key={f.id}>
                       <span className={`dotp${f.me ? " me" : ""}${f.tone === "win" ? " won" : ""}`} />
-                      <span className={f.me ? "me" : "who"}>{f.me ? "You" : f.who}</span>
-                      <span className={`amt ${f.tone}`}>{f.text}</span>
+                      <span className={`${f.me ? "me" : "who"}${f.owner && model.golden.has(f.owner) ? " goldname" : ""}`}>
+                        {f.me ? "You" : f.who}{f.owner && model.golden.has(f.owner) ? " ★" : ""}
+                      </span>
+                      <span className={`amt ${f.tone}${f.text.includes("★") ? " goldtxt" : ""}`}>{f.text}</span>
                     </li>
                   ))}
                 </ul>
               ))}
-              {tab === "leaders" && (model.leaders.length === 0 ? <p className="empty">No trades yet.</p> : (
-                <ol className="list">
-                  {model.leaders.map((l, i) => (
-                    <li key={l.owner}>
-                      <span className="rank">{i + 1}</span>
-                      <span className={l.me ? "me" : "who"}>{l.me ? "You" : short(l.owner)}</span>
-                      <span className={`amt ${l.pnl > 0n ? "win" : l.pnl < 0n ? "loss" : ""}`}>{l.pnl > 0n ? "+" : ""}{usd(l.pnl)}</span>
-                    </li>
-                  ))}
-                </ol>
-              ))}
+              {tab === "leaders" && (
+                <div className="leaders">
+                  <h4 className="hallh">★ Golden Hall <span className="muted small">Golden Taps held · drawn by MagicBlock VRF</span></h4>
+                  {model.goldenHall.length === 0 ? <p className="empty">No Golden Taps yet. Win 2x+ in the gold column to be first.</p> : (
+                    <ol className="list hall">
+                      {model.goldenHall.map((h, i) => (
+                        <li key={h.owner}>
+                          <span className="rank">{i + 1}</span>
+                          <span className={`${h.me ? "me" : "who"} goldname`}>{h.me ? "You" : short(h.owner)}</span>
+                          <span className="amt goldtxt">★ {h.count}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                  <h4 className="hallh">Top P&amp;L</h4>
+                  {model.leaders.length === 0 ? <p className="empty">No trades yet.</p> : (
+                    <ol className="list">
+                      {model.leaders.map((l, i) => (
+                        <li key={l.owner}>
+                          <span className="rank">{i + 1}</span>
+                          <span className={`${l.me ? "me" : "who"}${model.golden.has(l.owner) ? " goldname" : ""}`}>
+                            {l.me ? "You" : short(l.owner)}{model.golden.has(l.owner) ? ` ★${model.golden.get(l.owner)}` : ""}
+                          </span>
+                          <span className={`amt ${l.pnl > 0n ? "win" : l.pnl < 0n ? "loss" : ""}`}>{l.pnl > 0n ? "+" : ""}{usd(l.pnl)}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  )}
+                </div>
+              )}
               {tab === "pool" && (model.book ? (
                 <div>
                   <div className="kv"><span>Liquidity</span><span>{usd(model.book.liquidity)}</span></div>
