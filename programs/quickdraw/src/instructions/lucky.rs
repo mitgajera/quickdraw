@@ -17,7 +17,7 @@ use ephemeral_rollups_sdk::vrf::types::SerializableAccountMeta;
 use crate::error::QuickdrawError;
 use crate::events::LuckyRound;
 use crate::state::Lucky;
-use crate::{LUCKY_SEED, ROUND_SECS};
+use crate::{GOLDEN_AUTH_SEED, GOLDEN_MINT, LUCKY_SEED, ROUND_SECS};
 
 pub fn init_lucky_handler(ctx: Context<InitLucky>) -> Result<()> {
     let lucky = &mut ctx.accounts.lucky;
@@ -112,4 +112,81 @@ pub struct RequestLucky<'info> {
 pub struct CallbackLucky<'info> {
     #[account(mut, seeds = [LUCKY_SEED], bump = lucky.bump)]
     pub lucky: Account<'info, Lucky>,
+}
+
+/// Metaplex Token Metadata: gives the Golden Tap its name and image in every wallet.
+pub const TOKEN_METADATA_ID: Pubkey = pubkey!("metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s");
+
+/// Names the Golden Tap collectible (Metaplex metadata). Only the program can sign for the mint, so it
+/// signs here as `golden-auth`; only the golden columns' authority (the house) may call it, and it
+/// becomes the metadata's update authority, so later edits need no program change.
+pub fn golden_metadata_handler(ctx: Context<GoldenMetadata>, name: String, symbol: String, uri: String) -> Result<()> {
+    {
+        // the lucky account lives on the rollup; its Solana copy still carries the authority set at init
+        let data = ctx.accounts.lucky.try_borrow_data()?;
+        let lucky = Lucky::try_deserialize(&mut &data[..])?;
+        require_keys_eq!(lucky.authority, ctx.accounts.authority.key(), QuickdrawError::Unauthorized);
+    }
+    // CreateMetadataAccountV3 (discriminator 33), Borsh: DataV2 { name, symbol, uri, seller fee,
+    // creators: None, collection: None, uses: None }, is_mutable: true, collection_details: None
+    let mut data = vec![33u8];
+    for s in [&name, &symbol, &uri] {
+        data.extend((s.len() as u32).to_le_bytes());
+        data.extend(s.as_bytes());
+    }
+    data.extend(0u16.to_le_bytes());
+    data.extend([0u8, 0, 0, 1, 0]);
+
+    use anchor_lang::solana_program::instruction::{AccountMeta, Instruction};
+    let a = &ctx.accounts;
+    let ix = Instruction {
+        program_id: TOKEN_METADATA_ID,
+        accounts: vec![
+            AccountMeta::new(a.metadata.key(), false),
+            AccountMeta::new_readonly(a.mint.key(), false),
+            AccountMeta::new_readonly(a.golden_auth.key(), true),
+            AccountMeta::new(a.authority.key(), true),
+            AccountMeta::new_readonly(a.authority.key(), true),
+            AccountMeta::new_readonly(a.system_program.key(), false),
+            AccountMeta::new_readonly(a.rent.key(), false),
+        ],
+        data,
+    };
+    anchor_lang::solana_program::program::invoke_signed(
+        &ix,
+        &[
+            a.metadata.to_account_info(),
+            a.mint.to_account_info(),
+            a.golden_auth.to_account_info(),
+            a.authority.to_account_info(),
+            a.system_program.to_account_info(),
+            a.rent.to_account_info(),
+            a.token_metadata_program.to_account_info(),
+        ],
+        &[&[GOLDEN_AUTH_SEED, &[ctx.bumps.golden_auth]]],
+    )?;
+    Ok(())
+}
+
+#[derive(Accounts)]
+pub struct GoldenMetadata<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    /// CHECK: the lucky PDA (delegated, so read raw); its authority must sign.
+    #[account(seeds = [LUCKY_SEED], bump)]
+    pub lucky: UncheckedAccount<'info>,
+    /// CHECK: the Golden Tap's Metaplex metadata PDA, created by the Token Metadata program.
+    #[account(mut, seeds = [b"metadata", TOKEN_METADATA_ID.as_ref(), GOLDEN_MINT.as_ref()], bump, seeds::program = TOKEN_METADATA_ID)]
+    pub metadata: UncheckedAccount<'info>,
+    /// CHECK: the Golden Tap mint.
+    #[account(address = GOLDEN_MINT)]
+    pub mint: UncheckedAccount<'info>,
+    /// CHECK: the mint authority PDA; signs through the program.
+    #[account(seeds = [GOLDEN_AUTH_SEED], bump)]
+    pub golden_auth: UncheckedAccount<'info>,
+    /// CHECK: Metaplex Token Metadata.
+    #[account(address = TOKEN_METADATA_ID)]
+    pub token_metadata_program: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
 }

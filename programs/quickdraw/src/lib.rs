@@ -56,9 +56,10 @@ pub const CALM_FLOOR_RATIO: f64 = 0.5;
 /// After this long past a column, taps settle on whatever the ring holds (refund if nothing).
 pub const SETTLE_TIMEOUT_SECS: i64 = 30;
 
-/// The golden-column draw (see `state::Lucky`): one VRF seed per round of this many seconds.
+/// The golden-column draw (see `state::Lucky`): one VRF seed per round of this many seconds
+/// (a multiple of the 4-second columns: 7 columns per round, so a golden column about every 30s).
 pub const LUCKY_SEED: &[u8] = b"lucky";
-pub const ROUND_SECS: i64 = 60;
+pub const ROUND_SECS: i64 = 28;
 /// A golden-column win mints a Golden Tap only at this multiplier or more (no farming 1.1x boxes).
 pub const GOLDEN_MIN_MULT_BPS: u32 = 20_000;
 /// The Golden Tap collectible (0 decimals). Only `golden-auth` can mint it, through `mint_golden`.
@@ -220,5 +221,9 @@ pub mod quickdraw {
 
     pub fn callback_lucky(ctx: Context<CallbackLucky>, randomness: [u8; 32], round: i64) -> Result<()> {
         instructions::callback_lucky_handler(ctx, randomness, round)
+    }
+
+    pub fn golden_metadata(ctx: Context<GoldenMetadata>, name: String, symbol: String, uri: String) -> Result<()> {
+        instructions::golden_metadata_handler(ctx, name, symbol, uri)
     }
 }
