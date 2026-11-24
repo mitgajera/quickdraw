@@ -6,7 +6,7 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 import { ComputeBudgetProgram, Connection, LAMPORTS_PER_SOL, PublicKey, SystemProgram, Transaction, type Keypair } from "@solana/web3.js";
 import {
   PLAYER_SIZE, PROGRAM_ID, WALLET_TAP_FLAG, actionEscrowPda, ataOf, createAtaIdempotent, decodeCandles, decodePlayer, explainError, ix,
-  ROUND_SECS, decodeLucky, luckyPda, luckySeed, marketKeys, parseEvents, playerPda, sendWithKeypairs, transferTokens,
+  GOLDEN_MINT, ROUND_SECS, decodeLucky, luckyPda, luckySeed, marketKeys, parseEvents, playerPda, sendWithKeypairs, transferTokens,
   type MarketKeys,
 } from "@quickdraw/sdk";
 import { botKeypairs, config, keeperKeypair } from "./config";
@@ -175,6 +175,27 @@ function luckyLoop() {
   setInterval(run, 20_000);
 }
 
+// ---------- the Golden Hall: who holds Golden Taps ----------
+// Every player is known from the rollup, so read each one's Golden Tap account in batches of 100
+// (public devnet blocks getTokenLargestAccounts, and a token-program scan is heavy).
+let goldenHall: { owner: string; count: number }[] = [];
+async function loadGoldenHall() {
+  try {
+    const keys = await er.getProgramAccounts(PROGRAM_ID, { filters: [{ dataSize: PLAYER_SIZE }], dataSlice: { offset: 8, length: 32 } });
+    const owners = keys.map((k) => new PublicKey(k.account.data));
+    const counts: { owner: string; count: number }[] = [];
+    for (let i = 0; i < owners.length; i += 100) {
+      const batch = owners.slice(i, i + 100);
+      const infos = await base.getMultipleAccountsInfo(batch.map((o) => ataOf(o, GOLDEN_MINT)));
+      infos.forEach((info, j) => {
+        const count = info && info.data.length >= 72 ? Number(info.data.readBigUInt64LE(64)) : 0;
+        if (count > 0) counts.push({ owner: batch[j]!.toBase58(), count });
+      });
+    }
+    goldenHall = counts.sort((a, b) => b.count - a.count);
+  } catch { /* keep the last list; try again next minute */ }
+}
+
 // ---------- the escrow that pays for Magic Actions on Solana ----------
 async function fundEscrow() {
   const lamports = await base.getBalance(actionEscrowPda());
@@ -290,6 +311,8 @@ function serve() {
       if (url.pathname === "/health") { res.end(JSON.stringify({ ...stats, markets: config.markets, bots: bots.length })); return; }
       // house player wallets, listed publicly so anyone can tell them apart
       if (url.pathname === "/bots") { res.end(JSON.stringify(bots.map((b) => b.publicKey.toBase58()))); return; }
+      // the Golden Hall: Golden Tap holders, refreshed once a minute (so visitors never hit the RPC for it)
+      if (url.pathname === "/golden") { res.end(JSON.stringify(goldenHall)); return; }
       // "/sponsor" is the old name, kept for app builds that still call it
       if ((url.pathname === "/welcome" || url.pathname === "/sponsor") && req.method === "POST") {
         const user = await privyUser(req);
@@ -315,6 +338,8 @@ for (const m of markets) {
 }
 settleLoop();
 luckyLoop();
+void loadGoldenHall();
+setInterval(() => void loadGoldenHall(), 60_000);
 void countPlayers().catch(() => {});
 setInterval(() => void countPlayers().catch(() => {}), 5 * 60_000);
 serve();
