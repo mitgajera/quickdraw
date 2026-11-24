@@ -4,8 +4,8 @@ import { Buffer } from "buffer";
 import { PublicKey, SystemProgram, TransactionInstruction } from "@solana/web3.js";
 import idlJson from "./idl.json";
 import { ER_VALIDATOR, PROGRAM_ID, USDC_MINT } from "./constants";
-import { DELEGATION_PROGRAM_ID, TOKEN_PROGRAM_ID } from "./constants";
-import { actionEscrowPda, ataOf, bookPda, escrowAuthPda, ledgerPda, playerPda, vaultPda, type MarketKeys } from "./pdas";
+import { DELEGATION_PROGRAM_ID, TOKEN_PROGRAM_ID, VRF_EPHEMERAL_QUEUE } from "./constants";
+import { actionEscrowPda, ataOf, bookPda, escrowAuthPda, ledgerPda, luckyPda, playerPda, vaultPda, type MarketKeys } from "./pdas";
 
 type IdlType = string | { array: [IdlType, number] } | { defined: { name: string } | string };
 interface IdlSeed { kind: "const" | "account" | "arg"; value?: number[]; path?: string }
@@ -164,7 +164,13 @@ export const ix = {
     }, {
       band_index: a.bandIndex, column: a.column, zoom: a.zoom, stake: a.stake,
       min_mult_bps: a.minMultBps, quoted_mult_bps: a.quotedMultBps,
-    }),
+    }, [luckyPda()]), // the golden-column draw: a tap there is marked golden
+  /** Golden columns (one-time): create the draw account on Solana, then move it to the rollup. */
+  initLucky: (authority: PublicKey) => buildIx("init_lucky", { authority, lucky: luckyPda() }),
+  delegateLucky: (payer: PublicKey) => buildIx("delegate_lucky", { payer, lucky: luckyPda() }, {}, [ER_VALIDATOR]),
+  /** Asks MagicBlock VRF (on the rollup, free) for a round's seed. Permissionless. */
+  requestLucky: (payer: PublicKey, round: number) =>
+    buildIx("request_lucky", { payer, lucky: luckyPda(), oracle_queue: VRF_EPHEMERAL_QUEUE }, { round: BigInt(round) }),
   settleWallet: (payer: PublicKey, owner: PublicKey, m: MarketKeys) =>
     buildIx("settle_wallet", {
       ...playerAccounts(owner), ...marketAccounts(m), payer, ledger: ledgerPda(owner), escrow_auth: escrowAuthPda(),

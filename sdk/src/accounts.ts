@@ -1,6 +1,6 @@
 import { Buffer } from "buffer";
 import { PublicKey } from "@solana/web3.js";
-import { CANDLE_SLOTS, MAX_TAPS, ONE_X_BPS } from "./constants";
+import { CANDLE_SLOTS, LUCKY_ROUNDS, MAX_TAPS, ONE_X_BPS, ROUND_SECS } from "./constants";
 
 /** Sequential little-endian reader that skips the 8-byte Anchor discriminator. */
 class Reader {
@@ -121,3 +121,41 @@ export function decodeLedger(data: Uint8Array): Ledger {
   for (let i = 0; i < 32; i++) collected.push(r.u32());
   return { owner, collected, head: r.u8(), collectedTotal: r.u64(), paidTotal: r.u64() };
 }
+
+/** The golden-column draw: VRF seeds of recent rounds (`round % LUCKY_ROUNDS` slots, 0 = empty). */
+export interface Lucky { authority: PublicKey; rounds: bigint[]; seeds: Uint8Array[] }
+
+export function decodeLucky(data: Uint8Array): Lucky {
+  const b = buf(data);
+  const rounds: bigint[] = [], seeds: Uint8Array[] = [];
+  for (let i = 0; i < LUCKY_ROUNDS; i++) rounds.push(b.readBigInt64LE(8 + 32 + i * 8));
+  for (let i = 0; i < LUCKY_ROUNDS; i++) seeds.push(Uint8Array.from(b.subarray(8 + 32 + LUCKY_ROUNDS * 8 + i * 32, 8 + 32 + LUCKY_ROUNDS * 8 + (i + 1) * 32)));
+  return { authority: new PublicKey(b.subarray(8, 40)), rounds, seeds };
+}
+
+/** A round's VRF seed, if drawn. */
+export function luckySeed(lucky: Lucky, round: number): Uint8Array | null {
+  const i = ((round % LUCKY_ROUNDS) + LUCKY_ROUNDS) % LUCKY_ROUNDS;
+  return round > 0 && lucky.rounds[i] === BigInt(round) ? lucky.seeds[i]! : null;
+}
+
+/** Which column of a round is golden for a market: FNV-1a over seed || market, as in state.rs. */
+export function goldenIndex(seed: Uint8Array, market: PublicKey, cols: number): number {
+  const M = (1n << 64n) - 1n;
+  let x = 0xcbf29ce484222325n;
+  for (const b of [...seed, ...market.toBytes()]) { x ^= BigInt(b); x = (x * 0x100000001b3n) & M; }
+  return Number(x % BigInt(Math.max(1, cols)));
+}
+
+/** Start time (unix seconds) of a market's golden column in the round holding `atSecs`, if drawn. */
+export function goldenColumnStart(lucky: Lucky, market: PublicKey, colSecs: number, atSecs: number): number | null {
+  if (!colSecs || ROUND_SECS % colSecs !== 0) return null;
+  const round = Math.floor(atSecs / ROUND_SECS);
+  const seed = luckySeed(lucky, round);
+  if (!seed) return null;
+  return round * ROUND_SECS + goldenIndex(seed, market, ROUND_SECS / colSecs) * colSecs;
+}
+
+/** Whether the column starting at `start` is its market's golden column. */
+export const isGoldenColumn = (lucky: Lucky, market: PublicKey, colSecs: number, start: number) =>
+  goldenColumnStart(lucky, market, colSecs, start) === start;

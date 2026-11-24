@@ -40,6 +40,18 @@ export const CANDLE_SLOTS = 256;
 export const MAX_TAPS = 12;
 /** Set on the id of a tap paid straight from the wallet. */
 export const WALLET_TAP_FLAG = 0x8000_0000;
+/** Set on the id of a tap placed in its market's golden column. */
+export const GOLDEN_TAP_FLAG = 0x4000_0000;
+/** Golden columns: one VRF seed per round of this many seconds picks one column per market (lib.rs). */
+export const ROUND_SECS = 60;
+export const LUCKY_ROUNDS = 4;
+/** A golden-column win mints a Golden Tap at this multiplier or more. */
+export const GOLDEN_MIN_MULT_BPS = 20_000;
+/** The Golden Tap collectible (0 decimals); only the program can mint it. */
+export const GOLDEN_MINT = new PublicKey("ETsjfkbgiMEAmya1EgytD779DG3FuQAnFs5sPBDCEZP");
+/** MagicBlock VRF queue inside the ephemeral rollup (requests there are free). */
+export const VRF_EPHEMERAL_QUEUE = new PublicKey("5hBR571xnXppuCPveTrctfTU7tJLSN94nq7kv7FRK5Tc");
+export const VRF_PROGRAM_ID = new PublicKey("Vrf1RNUjXmQGjmQrQLvJHs9SNkvDJEsRVFPkfSQUwGz");
 /** Allowance the wallet grants the house vault at sign-in (re-approved when it runs low). */
 export const WALLET_ALLOWANCE = 1_000_000_000n; // 1,000 USDC
 export const ONE_X_BPS = 10_000;

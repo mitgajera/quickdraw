@@ -20,6 +20,10 @@ export const escrowAuthPda = () => find([s("escrow-auth")]);
 export const actionEscrowPda = () => find([s("balance"), escrowAuthPda().toBuffer(), Uint8Array.from([255])], DELEGATION_PROGRAM_ID);
 export const ataOf = (owner: PublicKey, mint = USDC_MINT) =>
   find([owner.toBuffer(), TOKEN_PROGRAM_ID.toBuffer(), mint.toBuffer()], ATA_PROGRAM_ID);
+/** The golden-column draw: one VRF seed per round (lives on the ER). */
+export const luckyPda = () => find([s("lucky")]);
+/** Mint authority of the Golden Tap collectible. */
+export const goldenAuthPda = () => find([s("golden-auth")]);
 
 /** Everything the program needs to know about one market. */
 export interface MarketKeys {

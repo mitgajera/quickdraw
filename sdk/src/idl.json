@@ -8,6 +8,62 @@
   },
   "instructions": [
     {
+      "name": "callback_lucky",
+      "discriminator": [
+        132,
+        192,
+        146,
+        221,
+        148,
+        129,
+        85,
+        157
+      ],
+      "accounts": [
+        {
+          "name": "vrf_program_identity",
+          "docs": [
+            "Scoped VRF identity PDA, bound to this program. Its presence as a signer proves",
+            "the callback was issued by the VRF program for this program."
+          ],
+          "signer": true
+        },
+        {
+          "name": "lucky",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  117,
+                  99,
+                  107,
+                  121
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "randomness",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "round",
+          "type": "i64"
+        }
+      ]
+    },
+    {
       "name": "collect_stake",
       "discriminator": [
         152,
@@ -405,6 +461,188 @@
               {
                 "kind": "account",
                 "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "owner_program",
+          "address": "7TBHSjenh1DFt7C8vnNVfXDLbZ3cCgEeAa4XcTUvF6Au"
+        },
+        {
+          "name": "delegation_program",
+          "address": "DELeGGvXpWV2fqJUhqcF5ZSYMS4JTLjteaAMARRSaeSh"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "delegate_lucky",
+      "discriminator": [
+        2,
+        173,
+        210,
+        11,
+        25,
+        132,
+        142,
+        205
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "buffer_lucky",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  102,
+                  102,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "lucky"
+              }
+            ],
+            "program": {
+              "kind": "const",
+              "value": [
+                95,
+                218,
+                217,
+                166,
+                155,
+                182,
+                162,
+                141,
+                37,
+                111,
+                77,
+                107,
+                164,
+                228,
+                131,
+                14,
+                138,
+                206,
+                219,
+                166,
+                29,
+                147,
+                135,
+                55,
+                30,
+                119,
+                136,
+                118,
+                221,
+                149,
+                40,
+                82
+              ]
+            }
+          }
+        },
+        {
+          "name": "delegation_record_lucky",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "lucky"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "delegation_program"
+            }
+          }
+        },
+        {
+          "name": "delegation_metadata_lucky",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  101,
+                  108,
+                  101,
+                  103,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110,
+                  45,
+                  109,
+                  101,
+                  116,
+                  97,
+                  100,
+                  97,
+                  116,
+                  97
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "lucky"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "delegation_program"
+            }
+          }
+        },
+        {
+          "name": "lucky",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  117,
+                  99,
+                  107,
+                  121
+                ]
               }
             ]
           }
@@ -869,6 +1107,49 @@
       "args": []
     },
     {
+      "name": "init_lucky",
+      "discriminator": [
+        98,
+        47,
+        98,
+        254,
+        64,
+        58,
+        81,
+        235
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "lucky",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  117,
+                  99,
+                  107,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "init_market",
       "discriminator": [
         33,
@@ -1127,6 +1408,30 @@
         {
           "name": "shares",
           "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "mint_golden",
+      "discriminator": [
+        25,
+        16,
+        231,
+        240,
+        32,
+        22,
+        229,
+        123
+      ],
+      "accounts": [],
+      "args": [
+        {
+          "name": "owner",
+          "type": "pubkey"
+        },
+        {
+          "name": "count",
+          "type": "u8"
         }
       ]
     },
@@ -1609,6 +1914,86 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "request_lucky",
+      "discriminator": [
+        100,
+        143,
+        196,
+        234,
+        74,
+        48,
+        241,
+        83
+      ],
+      "accounts": [
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "lucky",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  117,
+                  99,
+                  107,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "oracle_queue",
+          "writable": true,
+          "address": "5hBR571xnXppuCPveTrctfTU7tJLSN94nq7kv7FRK5Tc"
+        },
+        {
+          "name": "program_identity",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  105,
+                  100,
+                  101,
+                  110,
+                  116,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "vrf_program",
+          "address": "Vrf1RNUjXmQGjmQrQLvJHs9SNkvDJEsRVFPkfSQUwGz"
+        },
+        {
+          "name": "slot_hashes",
+          "address": "SysvarS1otHashes111111111111111111111111111"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "round",
+          "type": "i64"
+        }
+      ]
     },
     {
       "name": "set_session",
@@ -2268,6 +2653,19 @@
       ]
     },
     {
+      "name": "Lucky",
+      "discriminator": [
+        87,
+        59,
+        220,
+        142,
+        18,
+        5,
+        15,
+        33
+      ]
+    },
+    {
       "name": "Market",
       "discriminator": [
         219,
@@ -2295,6 +2693,32 @@
     }
   ],
   "events": [
+    {
+      "name": "GoldenWin",
+      "discriminator": [
+        59,
+        196,
+        219,
+        160,
+        206,
+        181,
+        180,
+        92
+      ]
+    },
+    {
+      "name": "LuckyRound",
+      "discriminator": [
+        58,
+        244,
+        150,
+        88,
+        174,
+        173,
+        185,
+        150
+      ]
+    },
     {
       "name": "TapPlaced",
       "discriminator": [
@@ -2437,6 +2861,16 @@
       "code": 6022,
       "name": "NotMagicAction",
       "msg": "Only a Quickdraw Magic Action may call this"
+    },
+    {
+      "code": 6023,
+      "name": "RoundNotOpen",
+      "msg": "That golden-column round is not open for a draw"
+    },
+    {
+      "code": 6024,
+      "name": "RoundDrawn",
+      "msg": "That golden-column round is already drawn"
     }
   ],
   "types": [
@@ -2621,6 +3055,29 @@
       }
     },
     {
+      "name": "GoldenWin",
+      "docs": [
+        "A golden-column win: `count` Golden Taps are on their way to the player's wallet."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "player",
+            "type": "pubkey"
+          },
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "count",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
       "name": "Ledger",
       "docs": [
         "Wallet play: the base-layer record of which wallet-tap stakes the house has collected from the",
@@ -2661,6 +3118,78 @@
           {
             "name": "bump",
             "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Lucky",
+      "docs": [
+        "The golden columns (ER). Time is cut into rounds of `ROUND_SECS`; MagicBlock VRF draws one random",
+        "seed per round, and the seed picks one golden column per market in that round. A win of at least",
+        "`GOLDEN_MIN_MULT_BPS` in a golden column also mints a Golden Tap collectible to the winner.",
+        "A round's seed is written once, by the VRF callback, and can never be replaced."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "rounds",
+            "docs": [
+              "Round number held in each slot (`round % LUCKY_ROUNDS`); 0 means empty."
+            ],
+            "type": {
+              "array": [
+                "i64",
+                4
+              ]
+            }
+          },
+          {
+            "name": "seeds",
+            "type": {
+              "array": [
+                {
+                  "array": [
+                    "u8",
+                    32
+                  ]
+                },
+                4
+              ]
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LuckyRound",
+      "docs": [
+        "A golden-column round was drawn by MagicBlock VRF."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "round",
+            "type": "i64"
+          },
+          {
+            "name": "seed",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
           }
         ]
       }
