@@ -22,7 +22,7 @@ interface Idl {
 
 export const IDL = idlJson as unknown as Idl;
 
-type Value = number | bigint | boolean | PublicKey | Value[] | { [k: string]: Value };
+type Value = number | bigint | boolean | string | PublicKey | Value[] | { [k: string]: Value };
 
 function encode(type: IdlType, value: Value, out: Buffer[]): void {
   if (typeof type === "string") {
@@ -35,6 +35,11 @@ function encode(type: IdlType, value: Value, out: Buffer[]): void {
       case "u64": return n(8, (b) => b.writeBigUInt64LE(BigInt(value as number | bigint)));
       case "i64": return n(8, (b) => b.writeBigInt64LE(BigInt(value as number | bigint)));
       case "pubkey": out.push((value as PublicKey).toBuffer()); return;
+      case "string": {
+        // Borsh: u32 length, then the UTF-8 bytes
+        const bytes = Buffer.from(String(value), "utf8");
+        return n(4 + bytes.length, (b) => { b.writeUInt32LE(bytes.length); bytes.copy(b, 4); });
+      }
       default: throw new Error(`unsupported IDL type ${type}`);
     }
   }
