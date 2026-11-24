@@ -3,7 +3,7 @@
 // added; `golden-handoff` then hands minting to the program's `golden-auth` PDA, after which only a
 // golden win can mint one.
 // Usage: HOUSE_KEYPAIR=path/to/house.json GOLDEN_MINT_KEYPAIR=path/to/golden-mint.json \
-//          pnpm --filter @quickdraw/keeper exec tsx src/golden-mint.ts [lucky | handoff]
+//          pnpm --filter @quickdraw/keeper exec tsx src/golden-mint.ts [lucky | handoff | metadata [uri]]
 // `lucky` creates the golden-column draw account and moves it to the ephemeral rollup.
 import { Connection, Keypair, PublicKey, SystemProgram, TransactionInstruction } from "@solana/web3.js";
 import fs from "node:fs";
@@ -33,6 +33,14 @@ if (process.argv[2] === "lucky") {
   } else {
     console.log("lucky account already on the ephemeral rollup");
   }
+  process.exit(0);
+}
+
+if (process.argv[2] === "metadata") {
+  // name and image for wallets; the JSON and PNG are served by the app (app/public/golden-tap.*)
+  const uri = process.argv[3] ?? "https://quickdraw-beta.vercel.app/golden-tap.json";
+  await sendWithKeypairs(base, [ix.goldenMetadata(house.publicKey, "Golden Tap", "GTAP", uri)], [house]);
+  console.log(`Golden Tap metadata created, uri ${uri}`);
   process.exit(0);
 }
 

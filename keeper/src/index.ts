@@ -172,7 +172,7 @@ function luckyLoop() {
   let quiet = 0;
   const run = () => void drawRounds().catch((e) => { if (quiet++ % 20 === 0) log("vrf request failed", explainError(e)); });
   run();
-  setInterval(run, 20_000);
+  setInterval(run, 10_000); // rounds are 28s: ask often so the next one is always drawn ahead
 }
 
 // ---------- the Golden Hall: who holds Golden Taps ----------
